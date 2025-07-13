@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist>
+  <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>This app requires audio input. If you do not have an audio interface connected it will use the built-in microphone.</string>
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>This app requires access to Bluetooth to function correctly.</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>This app requires access to Bluetooth to function correctly.</string>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <true/>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>CFBundleExecutable</key>
+    <string>${EXECUTABLE_NAME}</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.JosefNovotny.URLBeamer.URLBeamerAUv3</string>
+    <key>CFBundleName</key>
+    <string>URL Beamer</string>
+    <key>CFBundleDisplayName</key>
+    <string>URL Beamer</string>
+    <key>CFBundlePackageType</key>
+    <string>XPC!</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>Josef Novotny</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>UISupportsDocumentBrowser</key>
+    <true/>
+    <key>NSExtension</key>
+    <dict>
+      <key>NSExtensionPrincipalClass</key>
+      <string>URLBeamerAUFactoryAUv3</string>
+      <key>NSExtensionPointIdentifier</key>
+      <string>com.apple.AudioUnit-UI</string>
+      <key>NSExtensionAttributes</key>
+      <dict>
+        <key>AudioComponents</key>
+        <array>
+          <dict>
+            <key>name</key>
+            <string>Josef Novotny: URL Beamer</string>
+            <key>description</key>
+            <string>Send Custom URLs to launch apps</string>
+            <key>factoryFunction</key>
+            <string>URLBeamerAUFactoryAUv3</string>
+            <key>manufacturer</key>
+            <string>Novo</string>
+            <key>type</key>
+            <string>aumu</string>
+            <key>subtype</key>
+            <string>Beam</string>
+            <key>version</key>
+            <integer>65536</integer>
+            <key>sandboxSafe</key>
+            <true/>
+            <key>tags</key>
+            <array>
+              <string>Synth</string>
+            </array>
+          </dict>
+        </array>
+      </dict>
+    </dict>
+  </dict>
+</plist>
