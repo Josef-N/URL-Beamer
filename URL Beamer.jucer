@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<JUCERPROJECT id="MPYLod" name="URL Beamer" projectType="audioplug" useAppConfig="0"
+              addUsingNamespaceToJuceHeader="0" displaySplashScreen="1" jucerFormatVersion="1"
+              companyName="Josef Novotny" companyCopyright="Josef Novotny"
+              companyWebsite="https://novotny.klingt.org" pluginFormats="buildAUv3,buildStandalone"
+              pluginDesc="Send Custom URLs to launch apps" pluginManufacturerCode="Novo"
+              pluginCode="Beam" cppLanguageStandard="20" pluginAUMainType="'aumu'"
+              pluginAUIsSandboxSafe="0" pluginCharacteristicsValue="pluginIsSynth,pluginProducesMidiOut,pluginWantsMidiIn"
+              companyEmail="novotny@klingt.org">
+  <MAINGROUP id="nKA664" name="URL Beamer">
+    <GROUP id="{88DF2892-8B4B-DD5E-9D92-ABA90A4DB056}" name="Source">
+      <FILE id="qfW5f6" name="PluginProcessor.cpp" compile="1" resource="0"
+            file="Source/PluginProcessor.cpp"/>
+      <FILE id="iARAkP" name="PluginProcessor.h" compile="0" resource="0"
+            file="Source/PluginProcessor.h"/>
+      <FILE id="d5GU0x" name="PluginEditor.cpp" compile="1" resource="0"
+            file="Source/PluginEditor.cpp"/>
+      <FILE id="HG2Hvf" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
+      <FILE id="CddBVT" name="CustomFileChooser.h" compile="0" resource="0"
+            file="Source/CustomFileChooser.h"/>
+      <FILE id="HBaLCe" name="AppUtilities.mm" compile="1" resource="0" file="Source/AppUtilities.mm"/>
+      <FILE id="vDwSrJ" name="AppUtilities.h" compile="0" resource="0" file="Source/AppUtilities.h"/>
+    </GROUP>
+    <GROUP id="{27828787-B8EB-1C64-3C0E-ED6894FCB433}" name="Assets">
+      <FILE id="GiePul" name="Satelite.png" compile="0" resource="0" file="Assets/Satelite.png"/>
+      <FILE id="SNo0Jc" name="Satelite-big.png" compile="0" resource="0"
+            file="Assets/Satelite-big.png"/>
+    </GROUP>
+  </MAINGROUP>
+  <MODULES>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="1"/>
+    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+  </MODULES>
+  <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"
+               JUCE_WEB_BROWSER="0" JUCE_USE_FLAC="0" JUCE_USE_OGGVORBIS="0"
+               JUCE_USE_WINDOWS_MEDIA_FORMAT="0"/>
+  <EXPORTFORMATS>
+    <XCODE_IPHONE targetFolder="Builds/iOS" iosDevelopmentTeamID="9X9A75MJUP" buildNumber="1"
+                  smallIcon="GiePul" bigIcon="SNo0Jc" UIFileSharingEnabled="1"
+                  UISupportsDocumentBrowser="1" iosBluetoothPermissionNeeded="1"
+                  iosBackgroundAudio="1" iosBackgroundBle="1" iosAppGroupsId="group.com.JosefNovotny.URLBeamer"
+                  iosAppGroups="1" iosScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
+                  iPadScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
+                  UIRequiresFullScreen="0" iosDeviceFamily="1,2" microphonePermissionNeeded="1"
+                  iosPushNotifications="0">
+      <CONFIGURATIONS>
+        <CONFIGURATION name="Debug" auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"
+                       iosDeploymentTarget="15" iosCompatibility="15"/>
+        <CONFIGURATION name="Release" auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"
+                       iosDeploymentTarget="15" iosCompatibility="15" customXcodeFlags="GCC_GENERATE_DEBUGGING_SYMBOLS=YES,&#10;DEBUG_INFORMATION_FORMAT=dwarf-with-dsym,&#10;STRIP_INSTALLED_PRODUCT=YES,&#10;COPY_PHASE_STRIP=NO"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+      </MODULEPATHS>
+    </XCODE_IPHONE>
+    <XCODE_MAC targetFolder="Builds/MacOSX" xcodeValidArchs="arm64,arm64e,x86_64"
+               iosDevelopmentTeamID="9X9A75MJUP" hardenedRuntime="1" smallIcon="GiePul"
+               bigIcon="SNo0Jc" buildNumber="1" applicationCategory="public.app-category.music"
+               appSandboxOptions="com.apple.security.files.user-selected.read-write,com.apple.security.temporary-exception.mach-lookup.global-name,com.apple.security.temporary-exception.mach-register.global-name,com.apple.security.temporary-exception.shared-preference.read-write"
+               hardenedRuntimeOptions="com.apple.security.device.audio-input"
+               microphonePermissionNeeded="1">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" macOSDeploymentTarget="12.0" osxCompatibility="12.0 SDK"
+                       auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"/>
+        <CONFIGURATION isDebug="0" name="Release" macOSDeploymentTarget="12.0" osxCompatibility="12.0 SDK"
+                       auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+      </MODULEPATHS>
+    </XCODE_MAC>
+  </EXPORTFORMATS>
+</JUCERPROJECT>
