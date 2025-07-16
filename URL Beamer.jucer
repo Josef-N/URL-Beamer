@@ -50,7 +50,7 @@
     <XCODE_IPHONE targetFolder="Builds/iOS" iosDevelopmentTeamID="9X9A75MJUP" buildNumber="1"
                   smallIcon="GiePul" bigIcon="SNo0Jc" UIFileSharingEnabled="1"
                   UISupportsDocumentBrowser="1" iosBluetoothPermissionNeeded="1"
-                  iosBackgroundAudio="1" iosBackgroundBle="1" iosAppGroupsId="group.com.JosefNovotny.URLBeamer"
+                  iosBackgroundAudio="0" iosBackgroundBle="0" iosAppGroupsId="group.com.JosefNovotny.URLBeamer"
                   iosAppGroups="1" iosScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
                   iPadScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
                   UIRequiresFullScreen="0" iosDeviceFamily="1,2" microphonePermissionNeeded="1"
