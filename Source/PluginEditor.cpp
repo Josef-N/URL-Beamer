@@ -7,12 +7,10 @@
 #include "AppUtilities.h" // for AppGroup
 //==============================================================================
 TextEditorPopup::TextEditorPopup
-    (juce::TextButton& button1, juce::TextButton& button2, juce::TextButton& button3, 
-     juce::TextButton& button4, juce::TextButton& button5, juce::TextButton& button6, 
-     juce::TextButton& button7, juce::TextButton& button8,
-     juce::HyperlinkButton& Link1, juce::HyperlinkButton& Link2, juce::HyperlinkButton& Link3, 
-     juce::HyperlinkButton& Link4, juce::HyperlinkButton& Link5, juce::HyperlinkButton& Link6, 
-     juce::HyperlinkButton& Link7, juce::HyperlinkButton& Link8)
+    (juce::TextButton& button1, juce::TextButton& button2, juce::TextButton& button3, juce::TextButton& button4, 
+     juce::TextButton& button5, juce::TextButton& button6, juce::TextButton& button7, juce::TextButton& button8,
+     juce::HyperlinkButton& Link1, juce::HyperlinkButton& Link2, juce::HyperlinkButton& Link3, juce::HyperlinkButton& Link4, 
+     juce::HyperlinkButton& Link5, juce::HyperlinkButton& Link6, juce::HyperlinkButton& Link7, juce::HyperlinkButton& Link8)
   : button1Ref (button1), button2Ref (button2), button3Ref (button3), button4Ref (button4), 
     button5Ref (button5), button6Ref (button6), button7Ref (button7), button8Ref (button8), 
     Link1Ref (Link1), Link2Ref (Link2), Link3Ref (Link3), Link4Ref (Link4), 
@@ -223,22 +221,14 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
 {
     if (juce::JUCEApplicationBase::isStandaloneApp()) { showAlertWindow(); } // Standalone only
 
-    link1Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
-	(audioProcessor.treeState, "app1", Link1);
-	link2Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
-	(audioProcessor.treeState, "app2", Link2);
-	link3Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
-	(audioProcessor.treeState, "app3", Link3);
-	link4Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
-	(audioProcessor.treeState, "app4", Link4);
-    link5Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
-	(audioProcessor.treeState, "app5", Link5);
-	link6Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
-	(audioProcessor.treeState, "app6", Link6);
-	link7Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
-	(audioProcessor.treeState, "app7", Link7);
-	link8Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>
-	(audioProcessor.treeState, "app8", Link8);
+    link1Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app1", Link1);
+	link2Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app2", Link2);
+	link3Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app3", Link3);
+	link4Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app4", Link4);
+    link5Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app5", Link5);
+	link6Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app6", Link6);
+	link7Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app7", Link7);
+	link8Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app8", Link8);
 	
 	// Apply deferred state (editor is not open) if it exists, using the public getter
     if (audioProcessor.getDeferredState().isValid())
