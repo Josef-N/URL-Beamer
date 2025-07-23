@@ -54,7 +54,7 @@
                   iosAppGroups="1" iosScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
                   iPadScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
                   UIRequiresFullScreen="0" iosDeviceFamily="1,2" microphonePermissionNeeded="1"
-                  iosPushNotifications="0">
+                  iosPushNotifications="0" customPList="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;&#10;&lt;plist version=&quot;1.0&quot;&gt;&#10;&lt;dict&gt;&#10;&#9;&lt;key&gt;App Uses Non-Exempt Encryption&lt;/key&gt;&#10;&#9;&lt;false/&gt;&#10;&lt;/dict&gt;&#10;&lt;/plist&gt;&#10;">
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"
                        iosDeploymentTarget="15" iosCompatibility="15"/>
