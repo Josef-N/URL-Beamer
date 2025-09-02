@@ -26,7 +26,7 @@ URL Beamer does not play sound or process audio. It is a utility plugin intended
 ## Build Instructions
 This plugin was developed using the [JUCE framework](https://juce.com) (v8.0.8), under the **GNU General Public License (GPLv3)**.
 
-To build:
+To build:  
 1 – Download and install the JUCE framework.  
 2 – Clone this repository (needed resources: `URLBeamer.jucer` and the folders `Assets` and `Source`).  
 3 – Open `URLBeamer.jucer` in **Projucer**.  
