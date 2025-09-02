@@ -24,18 +24,22 @@ URL Beamer does not play sound or process audio. It is a utility plugin intended
 - iOS 15+
 
 ## Build Instructions
-This plugin was developed using the [JUCE framework](https://juce.com), under the **GNU General Public License (GPLv3)**.
+This plugin was developed using the [JUCE framework](https://juce.com) (v8.0.8), under the **GNU General Public License (GPLv3)**.
 
-To build:  
+To build:
 1 – Download and install the JUCE framework.  
-2 – Clone this repository.  
-3 – Open `URLBeamer.jucer` in **Projucer**  
+2 – Clone this repository (needed resources: `URLBeamer.jucer` and the folders `Assets` and `Source`).  
+3 – Open `URLBeamer.jucer` in **Projucer**.  
 4 – Select your target platform (iOS) and exporter (Xcode).  
-5 – Build & run.  
+5 – From the File menu: *Save Project and Open in IDE (Xcode)*.  
+6 – In Xcode: Build & run.  
+
 However, to run it on an iOS device, you will need to create your own Certificates and Profiles.  
 Alternatively, you could join my Development Team — I would appreciate it.
 
-JUCE is **not included** in this repository. You must download it separately.
+JUCE is **not included** in this repository. You must download it separately.  
+
+*Note:* The folders `Builds/iOS` and `JuceLibraryCode` are automatically generated when saving the project in Projucer. They are included here for reference, to illustrate the project structure after generation. These files may not always be up to date.
 
 ## License
 This project is licensed under the **GPL v3**.  
