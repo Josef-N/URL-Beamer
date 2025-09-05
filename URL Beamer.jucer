@@ -7,7 +7,7 @@
               pluginDesc="Send Custom URLs to launch apps" pluginManufacturerCode="Novo"
               pluginCode="Beam" cppLanguageStandard="20" pluginAUMainType="'aumu'"
               pluginAUIsSandboxSafe="0" pluginCharacteristicsValue="pluginIsSynth,pluginProducesMidiOut,pluginWantsMidiIn"
-              companyEmail="novotny@klingt.org">
+              companyEmail="novotny@klingt.org" version="1.0.1">
   <MAINGROUP id="nKA664" name="URL Beamer">
     <GROUP id="{88DF2892-8B4B-DD5E-9D92-ABA90A4DB056}" name="Source">
       <FILE id="qfW5f6" name="PluginProcessor.cpp" compile="1" resource="0"
@@ -54,7 +54,7 @@
                   iosAppGroups="1" iosScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
                   iPadScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
                   UIRequiresFullScreen="0" iosDeviceFamily="1,2" microphonePermissionNeeded="1"
-                  iosPushNotifications="0" customPList="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;&#10;&lt;plist version=&quot;1.0&quot;&gt;&#10;&lt;dict&gt;&#10;&#9;&lt;key&gt;App Uses Non-Exempt Encryption&lt;/key&gt;&#10;&#9;&lt;false/&gt;&#10;&lt;/dict&gt;&#10;&lt;/plist&gt;&#10;">
+                  iosPushNotifications="0" customPList="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;&#10;&lt;plist version=&quot;1.0&quot;&gt;&#10;&lt;dict&gt;&#10;&#9;&lt;key&gt;ITSAppUsesNonExemptEncryption&lt;/key&gt;&#10;&#9;&lt;false/&gt;&#10;&lt;/dict&gt;&#10;&lt;/plist&gt;&#10;">
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"
                        iosDeploymentTarget="15" iosCompatibility="15"/>
