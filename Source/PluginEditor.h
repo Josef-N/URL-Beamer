@@ -29,8 +29,8 @@ public:
     
     juce::TextEditor Name1, Name2, Name3, Name4, Name5, Name6, Name7, Name8,
                      text1, text2, text3, text4, text5, text6, text7, text8;
-    juce::TextButton OK, Cancel, Color, Note;
-    juce::Label Commit, CancelText;
+    juce::TextButton OK, Cancel, Color, Note, List;
+    juce::Label Commit, CancelText, ListLabel;
     
     std::function<void()> onClose;
     std::function<void()> onColorButtonClick;
@@ -235,7 +235,7 @@ private:
     juce::Component scrollContent;
     
     // Components
-    juce::HyperlinkButton Link1, Link2, Link3, Link4, Link5, Link6, Link7, Link8, Web;
+    juce::HyperlinkButton Link1, Link2, Link3, Link4, Link5, Link6, Link7, Link8;
     juce::TextButton button1, button2, button3, button4, button5, button6, button7, button8,
                      Edit, ToggleRows, menu, Info, exitColor, exitMidi, colorRange, MidiThru;
                      

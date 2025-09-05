@@ -126,9 +126,19 @@ TextEditorPopup::TextEditorPopup
 		if (onNoteButtonClick) onNoteButtonClick();
 		OK.triggerClick(); };
 		
+	contentArea.addAndMakeVisible (List);
+	List.setColour (juce::TextButton::textColourOffId, juce::Colours::yellow);
+    List.setButtonText ("URL List");
+    List.onClick = [] { juce::URL ("https://novotny.klingt.org/Apps/URLBeamer/url-schemes").launchInDefaultBrowser(); };
+    
 	contentArea.addAndMakeVisible (Commit);
 	Commit.setText ("OK, Color, Note: commit changes in text fields", juce::dontSendNotification);
 	Commit.setJustificationType	(juce::Justification::topRight);
+	
+	contentArea.addAndMakeVisible (ListLabel);
+	ListLabel.setText (
+	"Opens a community-maintained list of URL schemes (external webpage, user-submitted)", juce::dontSendNotification);
+	ListLabel.setJustificationType (juce::Justification::topLeft);
 	
 	resized(); // Safe default layout
 }
@@ -202,15 +212,17 @@ void TextEditorPopup::resized()
     Name8.setBounds (getXPosFor (&Name8, false), Name4.getY(), getWidthFor (&Name8), textHeight);
     text8.setBounds (getXPosFor (&text8, false), text4.getY(), getWidthFor (&text8), textHeight);
     
-    OK.setBounds (getWidth() - border - rightButtonW, top, rightButtonW, buttonHeight);
-    Cancel.setBounds     (OK.getX(), OK.getBottom() + gap, rightButtonW, buttonHeight);
-    CancelText.setBounds (OK.getX(), Cancel.getY(),        rightButtonW, buttonHeight);
-    Note.setBounds       (OK.getX(), Name4.getY() + 16,    rightButtonW, buttonHeight);
-    Color.setBounds      (OK.getX(), Note.getY()  - 54,    rightButtonW, buttonHeight);
+    OK.setBounds (getWidth() - border - rightButtonW, top,    rightButtonW, buttonHeight);
+    Cancel.setBounds     (OK.getX(), OK.getBottom() + gap,    rightButtonW, buttonHeight);
+    CancelText.setBounds (OK.getX(), Cancel.getY(),           rightButtonW, buttonHeight);
+    Note.setBounds       (OK.getX(), Name4.getY() + 16,       rightButtonW, buttonHeight);
+    Color.setBounds      (OK.getX(), Note.getY()  - 54,       rightButtonW, buttonHeight);
+    List.setBounds       (border,    text4.getBottom() + 30,  80,           30);
     
-    Commit.setBounds (border, text4.getBottom() + gap, oneRowWidth, 50);
+    Commit.setBounds    (border,          text4.getBottom() + gap,           getWidth() - (2 * border), 16);
+    ListLabel.setBounds (List.getRight(), List.getY() + 8, getWidth() - (2 * border + List.getWidth()), 70);
     
-    int contentHeight = Commit.getBottom() + 16;  // final vertical extent
+    int contentHeight = ListLabel.getBottom() + 90;  // final vertical extent
     contentArea.setBounds (0, 0, getWidth(), contentHeight);
     scrollView.setViewPosition (0, static_cast<int> (lastScrollY)); // Restore scroll position
 }
@@ -468,13 +480,8 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     scrollContent.addAndMakeVisible (Info);
     Info.setColour (juce::TextButton::textColourOffId, juce::Colours::yellow);
     Info.setButtonText ("?");
-    
-    scrollContent.addAndMakeVisible (Web);
-    Web.setURL (juce::URL ("https://novotny.klingt.org/Apps/URLBeamer/UserGuide"));
-    Web.onClick = [this]() { Info.setState (juce::TextButton::buttonDown);
-        juce::Timer::callAfterDelay (100, [this]
-        { Info.setState (juce::TextButton::buttonNormal); } ); };
-    
+    Info.onClick = [] { juce::URL ("https://novotny.klingt.org/Apps/URLBeamer/UserGuide").launchInDefaultBrowser(); };
+
     scrollContent.addAndMakeVisible (exitColor);
     exitColor.setVisible (false);
     exitColor.setColour (juce::TextButton::buttonColourId, juce::Colour (0xFFA100C4));
@@ -524,7 +531,8 @@ void CallAppAudioProcessorEditor::showAlertWindow() {
         ("This is an AUv3 plugin intended to be loaded into a host like AUM. \
         \n\nIt can however be run in standalone mode with limited features: \
         \n\u2713 HyperLink Buttons\n\u2713 Save/Load settings shared\nwith plugin \
-        \n\u2718 No MIDI output")
+        \n\u2718 No MIDI output"),
+        this  // associatedComponent: this = main editor window
     );
 }
 //==============================================================================
@@ -620,7 +628,6 @@ void CallAppAudioProcessorEditor::resized()
     ToggleRows.setBounds    (Edit.getX(),       button2.getY(),            rightButtonW, buttonHeight);
     menu.setBounds          (Edit.getX(),       button3.getY(),            rightButtonW, buttonHeight);
     Info.setBounds          (Edit.getX(),       button4.getY(),            rightButtonW, buttonHeight);
-    Web.setBounds           (Edit.getX(),       button4.getY(),            rightButtonW, buttonHeight);
     exitColor.setBounds     (Edit.getX(),       button4.getBottom() + 20,  rightButtonW, buttonHeight);
     exitMidi.setBounds      (Edit.getX(),       button4.getBottom() + 20,  rightButtonW, buttonHeight);
     MidiThru.setBounds      (Edit.getX() - 10,  InNoteSlider.getY() + 20,  50,           30);
@@ -633,7 +640,7 @@ void CallAppAudioProcessorEditor::resized()
     
     int contentHeight = button4.getBottom() + 40; // final vertical extent
     if (exitColor.isVisible() || exitMidi.isVisible())
-        { contentHeight = MidiThru.getBottom() + 40; }
+        { contentHeight = MidiThru.getBottom() + 120; }
     scrollContent.setBounds (0, 0, getWidth(), contentHeight);
     scrollView.setViewPosition (0, static_cast<int> (lastScrollY)); // ← restore after layout
 }
