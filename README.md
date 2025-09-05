@@ -24,7 +24,7 @@ URL Beamer does not play sound or process audio. It is a utility plugin intended
 - iOS 15+
 
 ## Build Instructions
-This plugin was developed using the [JUCE framework](https://juce.com) (v8.0.8), under the **GNU General Public License (GPLv3)**.
+This plugin was developed using the [JUCE framework](https://juce.com) (v8.0.9), under the **GNU General Public License (GPLv3)**.
 
 To build:  
 1 – Download and install the JUCE framework.  
