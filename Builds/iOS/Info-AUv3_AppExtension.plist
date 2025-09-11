@@ -37,7 +37,7 @@
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.1</string>
+    <string>1.0.2</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSHumanReadableCopyright</key>
@@ -70,7 +70,7 @@
             <key>subtype</key>
             <string>Beam</string>
             <key>version</key>
-            <integer>65537</integer>
+            <integer>65538</integer>
             <key>sandboxSafe</key>
             <true/>
             <key>tags</key>
