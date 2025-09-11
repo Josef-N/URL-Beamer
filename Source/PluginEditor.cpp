@@ -65,14 +65,14 @@ TextEditorPopup::TextEditorPopup
     Name6.setText (button6.getButtonText());
     Name7.setText (button7.getButtonText());
     Name8.setText (button8.getButtonText());
-    text1.setText (Link1.getURL().toString (false)); // Load existing URL
-    text2.setText (Link2.getURL().toString (false));
-    text3.setText (Link3.getURL().toString (false));
-    text4.setText (Link4.getURL().toString (false));
-    text5.setText (Link5.getURL().toString (false));
-    text6.setText (Link6.getURL().toString (false));
-    text7.setText (Link7.getURL().toString (false));
-    text8.setText (Link8.getURL().toString (false));
+    text1.setText (Link1.getURL().toString (true)); // Load existing URL
+    text2.setText (Link2.getURL().toString (true));
+    text3.setText (Link3.getURL().toString (true)); // .toString (bool includeGetParameters)
+    text4.setText (Link4.getURL().toString (true)); // false: returns the “sanitized” version of the URL
+    text5.setText (Link5.getURL().toString (true));
+    text6.setText (Link6.getURL().toString (true));
+    text7.setText (Link7.getURL().toString (true));
+    text8.setText (Link8.getURL().toString (true));
 
     contentArea.addAndMakeVisible (OK);                        // darkorchid
 	OK.setColour (juce::TextButton::buttonColourId, juce::Colour (0xFFA100C4));
@@ -86,14 +86,14 @@ TextEditorPopup::TextEditorPopup
         button6Ref.setButtonText (Name6.getText());
         button7Ref.setButtonText (Name7.getText());
         button8Ref.setButtonText (Name8.getText());
-        Link1Ref.setURL (juce::URL (text1.getText())); // Update Link1 URL
-        Link2Ref.setURL (juce::URL (text2.getText()));
-        Link3Ref.setURL (juce::URL (text3.getText()));
-        Link4Ref.setURL (juce::URL (text4.getText()));
-        Link5Ref.setURL (juce::URL (text5.getText()));
-        Link6Ref.setURL (juce::URL (text6.getText()));
-        Link7Ref.setURL (juce::URL (text7.getText()));
-        Link8Ref.setURL (juce::URL (text8.getText()));
+        Link1Ref.setURL (juce::URL::createWithoutParsing (text1.getText())); // Update Link1 URL
+        Link2Ref.setURL (juce::URL::createWithoutParsing (text2.getText()));
+        Link3Ref.setURL (juce::URL::createWithoutParsing (text3.getText()));
+        Link4Ref.setURL (juce::URL::createWithoutParsing (text4.getText()));
+        Link5Ref.setURL (juce::URL::createWithoutParsing (text5.getText()));
+        Link6Ref.setURL (juce::URL::createWithoutParsing (text6.getText()));
+        Link7Ref.setURL (juce::URL::createWithoutParsing (text7.getText()));
+        Link8Ref.setURL (juce::URL::createWithoutParsing (text8.getText()));
         // Sync the updated state to the ValueTree
 		if (auto* editor = dynamic_cast<CallAppAudioProcessorEditor*>(getParentComponent()))
 		{
@@ -1121,14 +1121,14 @@ void CallAppAudioProcessorEditor::saveStateToValueTree()
     state.setProperty ("button6Text", button6.getButtonText(), nullptr);
     state.setProperty ("button7Text", button7.getButtonText(), nullptr);
     state.setProperty ("button8Text", button8.getButtonText(), nullptr);
-    state.setProperty ("link1URL", Link1.getURL().toString (false), nullptr);
-    state.setProperty ("link2URL", Link2.getURL().toString (false), nullptr);
-    state.setProperty ("link3URL", Link3.getURL().toString (false), nullptr);
-    state.setProperty ("link4URL", Link4.getURL().toString (false), nullptr);
-    state.setProperty ("link5URL", Link5.getURL().toString (false), nullptr);
-    state.setProperty ("link6URL", Link6.getURL().toString (false), nullptr);
-    state.setProperty ("link7URL", Link7.getURL().toString (false), nullptr);
-    state.setProperty ("link8URL", Link8.getURL().toString (false), nullptr);
+    state.setProperty ("link1URL", Link1.getURL().toString (true), nullptr);
+    state.setProperty ("link2URL", Link2.getURL().toString (true), nullptr);
+    state.setProperty ("link3URL", Link3.getURL().toString (true), nullptr);
+    state.setProperty ("link4URL", Link4.getURL().toString (true), nullptr);
+    state.setProperty ("link5URL", Link5.getURL().toString (true), nullptr);
+    state.setProperty ("link6URL", Link6.getURL().toString (true), nullptr);
+    state.setProperty ("link7URL", Link7.getURL().toString (true), nullptr);
+    state.setProperty ("link8URL", Link8.getURL().toString (true), nullptr);
     state.setProperty ("Color1", button1.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
     state.setProperty ("Color2", button2.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
     state.setProperty ("Color3", button3.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
@@ -1173,14 +1173,14 @@ void CallAppAudioProcessorEditor::loadStateFromValueTree (const juce::ValueTree&
     button6.setButtonText (state.getProperty ("button6Text", "...").toString());
     button7.setButtonText (state.getProperty ("button7Text", "...").toString());
     button8.setButtonText (state.getProperty ("button8Text", "...").toString());
-    Link1.setURL(juce::URL(state.getProperty ("link1URL", "").toString()));
-    Link2.setURL(juce::URL(state.getProperty ("link2URL", "").toString()));
-    Link3.setURL(juce::URL(state.getProperty ("link3URL", "").toString()));
-    Link4.setURL(juce::URL(state.getProperty ("link4URL", "").toString()));
-    Link5.setURL(juce::URL(state.getProperty ("link5URL", "").toString()));
-    Link6.setURL(juce::URL(state.getProperty ("link6URL", "").toString()));
-    Link7.setURL(juce::URL(state.getProperty ("link7URL", "").toString()));
-    Link8.setURL(juce::URL(state.getProperty ("link8URL", "").toString()));
+    Link1.setURL (juce::URL::createWithoutParsing (state.getProperty ("link1URL", "").toString()));
+    Link2.setURL (juce::URL::createWithoutParsing (state.getProperty ("link2URL", "").toString()));
+    Link3.setURL (juce::URL::createWithoutParsing (state.getProperty ("link3URL", "").toString()));
+    Link4.setURL (juce::URL::createWithoutParsing (state.getProperty ("link4URL", "").toString()));
+    Link5.setURL (juce::URL::createWithoutParsing (state.getProperty ("link5URL", "").toString()));
+    Link6.setURL (juce::URL::createWithoutParsing (state.getProperty ("link6URL", "").toString()));
+    Link7.setURL (juce::URL::createWithoutParsing (state.getProperty ("link7URL", "").toString()));
+    Link8.setURL (juce::URL::createWithoutParsing (state.getProperty ("link8URL", "").toString()));
     button1.setColour(juce::TextButton::buttonColourId, juce::Colour::fromString(state.getProperty("Color1").toString()));
     button2.setColour(juce::TextButton::buttonColourId, juce::Colour::fromString(state.getProperty("Color2").toString()));
     button3.setColour(juce::TextButton::buttonColourId, juce::Colour::fromString(state.getProperty("Color3").toString()));

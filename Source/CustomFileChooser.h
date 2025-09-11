@@ -5,6 +5,7 @@
 
 #include <JuceHeader.h>
 #include "AppUtilities.h" // for AppGroup
+#include <algorithm> // for sorting filenames
 //==============================================================================
 class CustomFileChooser : public juce::Component, public juce::ListBoxModel
 {
@@ -337,7 +338,14 @@ private:
 
     void refreshFileList()
     {
-        files = directory.findChildFiles (juce::File::TypesOfFileToFind::findFiles, false, pattern);        
+        files = directory.findChildFiles (juce::File::TypesOfFileToFind::findFiles, false, pattern);
+        
+		// Natural, case-insensitive alphabetical sort: "File2" < "File10" (stable keeps order of equal names)
+		std::stable_sort (files.begin(), files.end(), [] (const juce::File& a, const juce::File& b)
+			{
+				return a.getFileName().compareNatural (b.getFileName(), /*isCaseSensitive=*/false) < 0;
+			});
+		
         fileList.updateContent();
         
         // Automatically select the last used file if it exists
