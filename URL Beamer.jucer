@@ -7,7 +7,7 @@
               pluginDesc="Send Custom URLs to launch apps" pluginManufacturerCode="Novo"
               pluginCode="Beam" cppLanguageStandard="20" pluginAUMainType="'aumu'"
               pluginAUIsSandboxSafe="0" pluginCharacteristicsValue="pluginIsSynth,pluginProducesMidiOut,pluginWantsMidiIn"
-              companyEmail="novotny@klingt.org" version="1.0.1">
+              companyEmail="novotny@klingt.org" version="1.0.2">
   <MAINGROUP id="nKA664" name="URL Beamer">
     <GROUP id="{88DF2892-8B4B-DD5E-9D92-ABA90A4DB056}" name="Source">
       <FILE id="qfW5f6" name="PluginProcessor.cpp" compile="1" resource="0"
