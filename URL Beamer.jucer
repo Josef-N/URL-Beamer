@@ -7,7 +7,7 @@
               pluginDesc="Send Custom URLs to launch apps" pluginManufacturerCode="Novo"
               pluginCode="Beam" cppLanguageStandard="20" pluginAUMainType="'aumu'"
               pluginAUIsSandboxSafe="0" pluginCharacteristicsValue="pluginIsSynth,pluginProducesMidiOut,pluginWantsMidiIn"
-              companyEmail="novotny@klingt.org" version="1.0.2">
+              companyEmail="novotny@klingt.org" version="1.0.3">
   <MAINGROUP id="nKA664" name="URL Beamer">
     <GROUP id="{88DF2892-8B4B-DD5E-9D92-ABA90A4DB056}" name="Source">
       <FILE id="qfW5f6" name="PluginProcessor.cpp" compile="1" resource="0"
@@ -35,6 +35,8 @@
     <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
             useGlobalPath="1"/>
     <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="1"/>
     <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
     <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
@@ -49,12 +51,13 @@
   <EXPORTFORMATS>
     <XCODE_IPHONE targetFolder="Builds/iOS" iosDevelopmentTeamID="9X9A75MJUP" buildNumber="1"
                   smallIcon="GiePul" bigIcon="SNo0Jc" UIFileSharingEnabled="1"
-                  UISupportsDocumentBrowser="1" iosBluetoothPermissionNeeded="1"
-                  iosBackgroundAudio="0" iosBackgroundBle="0" iosAppGroupsId="group.com.JosefNovotny.URLBeamer"
-                  iosAppGroups="1" iosScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
+                  UISupportsDocumentBrowser="1" iosBackgroundAudio="0" iosBackgroundBle="0"
+                  iosAppGroupsId="group.com.JosefNovotny.URLBeamer" iosAppGroups="1"
+                  iosScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait"
                   iPadScreenOrientation="UIInterfaceOrientationLandscapeLeft,UIInterfaceOrientationLandscapeRight,UIInterfaceOrientationPortrait,UIInterfaceOrientationPortraitUpsideDown"
-                  UIRequiresFullScreen="0" iosDeviceFamily="1,2" microphonePermissionNeeded="1"
-                  iosPushNotifications="0" customPList="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;&#10;&lt;plist version=&quot;1.0&quot;&gt;&#10;&lt;dict&gt;&#10;&#9;&lt;key&gt;ITSAppUsesNonExemptEncryption&lt;/key&gt;&#10;&#9;&lt;false/&gt;&#10;&lt;/dict&gt;&#10;&lt;/plist&gt;&#10;">
+                  UIRequiresFullScreen="0" iosDeviceFamily="1,2" iosPushNotifications="0"
+                  customPList="&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;&#10;&lt;!DOCTYPE plist PUBLIC &quot;-//Apple//DTD PLIST 1.0//EN&quot; &quot;http://www.apple.com/DTDs/PropertyList-1.0.dtd&quot;&gt;&#10;&lt;plist version=&quot;1.0&quot;&gt;&#10;&lt;dict&gt;&#10;&#9;&lt;key&gt;ITSAppUsesNonExemptEncryption&lt;/key&gt;&#10;&#9;&lt;false/&gt;&#10;&lt;/dict&gt;&#10;&lt;/plist&gt;&#10;"
+                  microphonePermissionNeeded="1">
       <CONFIGURATIONS>
         <CONFIGURATION name="Debug" auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"
                        iosDeploymentTarget="15" iosCompatibility="15"/>
@@ -74,19 +77,21 @@
         <MODULEPATH id="juce_audio_utils" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
         <MODULEPATH id="juce_audio_formats" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
         <MODULEPATH id="juce_audio_devices" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
       </MODULEPATHS>
     </XCODE_IPHONE>
-    <XCODE_MAC targetFolder="Builds/MacOSX" xcodeValidArchs="arm64,arm64e,x86_64"
-               iosDevelopmentTeamID="9X9A75MJUP" hardenedRuntime="1" smallIcon="GiePul"
-               bigIcon="SNo0Jc" buildNumber="1" applicationCategory="public.app-category.music"
+    <XCODE_MAC targetFolder="Builds/MacOSX" xcodeValidArchs="arm64,arm64e" iosDevelopmentTeamID="9X9A75MJUP"
+               smallIcon="GiePul" bigIcon="SNo0Jc" buildNumber="1" applicationCategory="public.app-category.music"
                appSandboxOptions="com.apple.security.files.user-selected.read-write,com.apple.security.temporary-exception.mach-lookup.global-name,com.apple.security.temporary-exception.mach-register.global-name,com.apple.security.temporary-exception.shared-preference.read-write"
                hardenedRuntimeOptions="com.apple.security.device.audio-input"
                microphonePermissionNeeded="1">
       <CONFIGURATIONS>
-        <CONFIGURATION isDebug="1" name="Debug" macOSDeploymentTarget="12.0" osxCompatibility="12.0 SDK"
-                       auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"/>
-        <CONFIGURATION isDebug="0" name="Release" macOSDeploymentTarget="12.0" osxCompatibility="12.0 SDK"
-                       auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"/>
+        <CONFIGURATION isDebug="0" name="Debug" macOSDeploymentTarget="12.0" osxCompatibility="12.0 SDK"
+                       auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"
+                       osxArchitecture="Native"/>
+        <CONFIGURATION name="Release" macOSDeploymentTarget="12.0" osxCompatibility="12.0 SDK"
+                       auBinaryLocation="/Users/josef/Documents/JUCE/User-Components"
+                       osxArchitecture="Native"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
         <MODULEPATH id="juce_audio_basics" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
@@ -101,6 +106,7 @@
         <MODULEPATH id="juce_audio_utils" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
         <MODULEPATH id="juce_audio_formats" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
         <MODULEPATH id="juce_audio_devices" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="../../../../../Applications/Weitere Utilities/JUCE/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
   </EXPORTFORMATS>
