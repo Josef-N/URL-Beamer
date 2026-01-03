@@ -7,10 +7,6 @@
     <false/>
     <key>NSMicrophoneUsageDescription</key>
     <string>This app requires audio input. If you do not have an audio interface connected it will use the built-in microphone.</string>
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>This app requires access to Bluetooth to function correctly.</string>
-    <key>NSBluetoothPeripheralUsageDescription</key>
-    <string>This app requires access to Bluetooth to function correctly.</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UIViewControllerBasedStatusBarAppearance</key>
@@ -37,7 +33,7 @@
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.2</string>
+    <string>1.0.3</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSHumanReadableCopyright</key>
@@ -70,7 +66,7 @@
             <key>subtype</key>
             <string>Beam</string>
             <key>version</key>
-            <integer>65538</integer>
+            <integer>65539</integer>
             <key>sandboxSafe</key>
             <true/>
             <key>tags</key>
