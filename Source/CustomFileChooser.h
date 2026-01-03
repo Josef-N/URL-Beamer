@@ -32,6 +32,7 @@ public:
             selectDirectory.setButtonText (selectDirectoryToggleState ? "Documents" : "Plugin");
             selectDirectory.onClick = [this]() {
 				selectDirectoryToggleState = selectDirectory.getToggleState();  // Update global state
+				setStandaloneSelectDirectoryToggleState (selectDirectoryToggleState);  // for Autoload
 				selectDirectory.setButtonText (selectDirectoryToggleState ? "Documents" : "Plugin");
 				// Refresh the directory shown in the file chooser
   				directory = getAppGroupDirectory();  // This function will use the updated global state
@@ -109,22 +110,39 @@ public:
     {
 		auto top = 8;   // Default for Plugin
 		auto border = 8;
-		auto bottom = top + 142;     // fileList, Default for Standalone/Landscape
+		auto bottom = top + 142;     // fileList, Default for Standalone
 		
-		if (juce::JUCEApplicationBase::isStandaloneApp()) {
-			if (getHeight() > getWidth()) {                               // Portrait
-				top = 54;            // Notch: 44 points, Dynamic Island: 48 points
-				border = 8;
-				bottom = top + 142;
-			} else {
-				top = 8;                                                  // Landscape
-				border = 54;
-				bottom = top + 142; }
-		}                            // if Plugin:
-        else if (getWidth() > 560) { // Save for GarageBand + iPhone SE 4' (w = 568 pt)
-		    top = 8;
-		    border = 54;
+		#if JUCE_IOS
+		if (juce::JUCEApplicationBase::isStandaloneApp()) {  // if Standalone:
+		    const bool portrait = (getHeight() > getWidth());
+	                  // iPad
+		    if (isRunningOnIPad()) {
+			    top = 60;
+			    border = portrait ? 8 : 64;  // Portrait : Landscape
+	            bottom = top + 142;
+	        } else {  // iPhone
+	            if (portrait) {  // Portrait
+	                top = 64;         // Notch: 44 points, Dynamic Island: 48 points
+	                border = 8;
+				    bottom = top + 152;
+				} else {
+				    top = 8;     // Landscape
+				    border = 64;
+				    bottom = top + 142;
+	            }
+		    }
+		} else {  // if Plugin:
+		    bottom = top + 116;
+		    if (getWidth() > 560) {   // Save for GarageBand + iPhone SE 4' (w = 568 pt)
+		        top = 8;
+		        border = 64;
+		    }
 	    }
+	    #else  // (#elif) JUCE_MAC
+	    top = 8;
+	    if (getWidth() > 560) { border = 54; }
+	    #endif
+	    
 		int spacing = 2;
         int buttonHeight = 40;
         int rButtonWith = 60;
@@ -144,14 +162,12 @@ public:
                                              reducedWith - buttonWith - 126, buttonHeight); }
 			else { fileNameEditor.setBounds (border + buttonWith + spacing, titleLabel.getBottom(), 
 			                                 reducedWith - buttonWith - 2, buttonHeight); }
-            fileList.setBounds (border, fileNameEditor.getBottom() + spacing, reducedWith, getHeight() - bottom);
-        }
-		else {
+        } else {
 			if (isSaveMode == true || DeleteMode == true)
 				 { fileNameEditor.setBounds (border, titleLabel.getBottom(), reducedWith - 124, buttonHeight); }
 			else { fileNameEditor.setBounds (border, titleLabel.getBottom(), reducedWith,       buttonHeight); }
-			fileList.setBounds (border, fileNameEditor.getBottom() + spacing, reducedWith, getHeight() - top - 116);
         }
+        fileList.setBounds (border, fileNameEditor.getBottom() + spacing, reducedWith, getHeight() - bottom);
         
         saveButton  .setBounds (border,               fileList.getBottom() + spacing, buttonWith, buttonHeight);
         loadButton  .setBounds (saveButton.getRight()   + spacing, saveButton.getY(), buttonWith, buttonHeight);
@@ -167,13 +183,11 @@ public:
     bool isInSaveMode() const { return isSaveMode; }
     
     //============================================================================== 
-    
     // for iOS standalone
     void setToggleState (bool newState) {
         selectDirectory.setToggleState (newState, juce::dontSendNotification);
     }
     //==============================================================================
-    
     // Set the last used file (to be called from the editor)
     void setLastUsedFile (const juce::File& file)
     {
@@ -293,45 +307,31 @@ private:
     void handleFileNameInput() // (Call for save)
     {
         auto enteredName = fileNameEditor.getText().trim();
-        if (enteredName.isEmpty())
-        {
+        if (enteredName.isEmpty()) {
             juce::Logger::writeToLog ("Error: The file name cannot be empty.");
             return;
         }
-
-        if (!enteredName.endsWithIgnoreCase (".xml"))
-        {
+        if (!enteredName.endsWithIgnoreCase (".xml")) {
             enteredName += ".xml";
         }
-
         selectedFile = directory.getChildFile (enteredName);
         
-        if (onFileSelected)
-        {
-            onFileSelected (selectedFile);
-        }
+        if (onFileSelected) { onFileSelected (selectedFile); }
     }
     
     void deleteSelectedFile()
     {
-        if (!selectedFile.existsAsFile())
-        {
+        if (!selectedFile.existsAsFile()) {
             juce::Logger::writeToLog ("No file selected or file does not exist.");
             return;
         }
-
-        if (!selectedFile.deleteFile())
-        {
+        if (!selectedFile.deleteFile()) {
             juce::Logger::writeToLog ("Failed to delete file: " + selectedFile.getFullPathName());
             return;
         }
-        
 		if (selectedFile == lastUsedFile) // Reset lastUsedFile if it matches the deleted file
-		{
-			lastUsedFile = juce::File();
-		}
+		{   lastUsedFile = juce::File(); }
 
-        DBG ("File deleted: " << selectedFile.getFullPathName());
         refreshFileList(); // Refresh file list after deletion
         fileNameEditor.setText (removeExtension (selectedFile.getFileName())); // remove ".xml"
     }
@@ -358,14 +358,10 @@ private:
                 selectedFile = lastUsedFile; // Update the currently selected file
                 fileList.repaint(); // not necessary, jus in case ...
                 fileNameEditor.setText (removeExtension (selectedFile.getFileName())); // remove ".xml"
-            }
-            else
-            {
+            } else {
                 selectedFile = juce::File(); // Clear selection if the file isn't found
             }
-        }
-        else
-        {
+        } else {
             selectedFile = juce::File();     // Clear selection if no lastUsedFile exists
         }
     }

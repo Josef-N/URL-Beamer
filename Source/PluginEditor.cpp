@@ -1,10 +1,10 @@
-
 //                 PluginEditor.cpp    –   JUCE plugin editor
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "CustomFileChooser.h"
 #include "AppUtilities.h" // for AppGroup
+
 //==============================================================================
 TextEditorPopup::TextEditorPopup
     (juce::TextButton& button1, juce::TextButton& button2, juce::TextButton& button3, juce::TextButton& button4, 
@@ -125,20 +125,21 @@ TextEditorPopup::TextEditorPopup
 	Note.onClick = [this]() {
 		if (onNoteButtonClick) onNoteButtonClick();
 		OK.triggerClick(); };
-		
-	contentArea.addAndMakeVisible (List);
-	List.setColour (juce::TextButton::textColourOffId, juce::Colours::yellow);
-    List.setButtonText ("URL List");
-    List.onClick = [] { juce::URL ("https://novotny.klingt.org/Apps/URLBeamer/url-schemes").launchInDefaultBrowser(); };
+	
+    if (juce::JUCEApplicationBase::isStandaloneApp() && shouldSuppressStandaloneAlert())
+	    { contentArea.addAndMakeVisible (reset); }
+	reset.setColour (juce::TextButton::textColourOffId, juce::Colour (0xFF0096FF));
+    reset.setButtonText ("reset");
+    reset.onClick = [] { setSuppressStandaloneAlert (false); };
     
 	contentArea.addAndMakeVisible (Commit);
 	Commit.setText ("OK, Color, Note: commit changes in text fields", juce::dontSendNotification);
 	Commit.setJustificationType	(juce::Justification::topRight);
 	
-	contentArea.addAndMakeVisible (ListLabel);
-	ListLabel.setText (
-	"Opens a community-maintained list of URL schemes (external webpage, user-submitted)", juce::dontSendNotification);
-	ListLabel.setJustificationType (juce::Justification::topLeft);
+	if (juce::JUCEApplicationBase::isStandaloneApp() && shouldSuppressStandaloneAlert())
+	    { contentArea.addAndMakeVisible (resetLabel); }
+	resetLabel.setText ("Show startup message again", juce::dontSendNotification);
+	resetLabel.setJustificationType (juce::Justification::topLeft);
 	
 	resized(); // Safe default layout
 }
@@ -153,23 +154,39 @@ void TextEditorPopup::paint (juce::Graphics& g)
 void TextEditorPopup::resized()
 { 
     lastScrollY = scrollView.getViewPositionY(); // Capture current scroll position
-    scrollView.setBounds (getLocalBounds());     // Full screen
     
-    auto top = 8;   // Default for Plugin
+    auto top = 8;   // Default for Plugin (content padding inside the viewport)
     auto border = 8;
-                          // if Standalone:
-    if (juce::JUCEApplicationBase::isStandaloneApp()) {
-    	if (getHeight() > getWidth()) {                               // Portrait
-    		top = 54;            // Notch: 44 points, Dynamic Island: 48 points
-    		border = 8;
-    	} else {                                                      // Landscape
-    		top = 30;
-    		border = 54; }
-    }                     // if Plugin:
-    else if (getWidth() > 560) { // Save for GarageBand + iPhone SE 4' (w = 568 pt)
+    int pinnedTopInset = 0; // NON-scrolling inset (viewport pushed down)
+    
+    #if JUCE_IOS
+    if (juce::JUCEApplicationBase::isStandaloneApp()) {  // if Standalone:
+		const bool portrait = (getHeight() > getWidth());
+	              // iPad
+		if (isRunningOnIPad()) {
+            pinnedTopInset = 76;  // Stage Manager / gesture safe area
+            top = 6;  // Keep content padding small, because the big space is now "pinned"
+            border = portrait ? 8 : 64;  // Portrait : Landscape
+		} else {  // iPhone
+            if (portrait) {  // Portrait
+                top = 64;         // Notch: 44 points, Dynamic Island: 48 points
+                border = 8;
+            } else {         // Landscape
+                top = 30;
+                border = 64;
+        }   }
+    }  // if Plugin:
+    else if (getWidth() > 560) {  // Save for GarageBand + iPhone SE 4' (w = 568 pt)
 		top = 8;
-		border = 54;
+		border = 64;
 	}
+	#else  // (#elif) JUCE_MAC
+	top = 8;
+	if (getWidth() > 560) { border = 54; }
+	#endif
+	// IMPORTANT: apply pinned top inset to the viewport so it doesn't scroll away
+    scrollView.setBounds (getLocalBounds().withTrimmedTop (pinnedTopInset));
+	
     auto gap = 10;
 	auto textHeight = 30;  // Editor: 22
     auto buttonHeight = 44;
@@ -217,13 +234,14 @@ void TextEditorPopup::resized()
     CancelText.setBounds (OK.getX(), Cancel.getY(),           rightButtonW, buttonHeight);
     Note.setBounds       (OK.getX(), Name4.getY() + 16,       rightButtonW, buttonHeight);
     Color.setBounds      (OK.getX(), Note.getY()  - 54,       rightButtonW, buttonHeight);
-    List.setBounds       (border,    text4.getBottom() + 30,  80,           30);
+    reset.setBounds      (border,    text4.getBottom() + 30,  60,           30);
     
-    Commit.setBounds    (border,          text4.getBottom() + gap,           getWidth() - (2 * border), 16);
-    ListLabel.setBounds (List.getRight(), List.getY() + 8, getWidth() - (2 * border + List.getWidth()), 70);
+    Commit.setBounds     (border,           text4.getBottom() + gap,            getWidth() - (2 * border),  16);
+    resetLabel.setBounds (reset.getRight(), reset.getY() + 8, getWidth() - (2 * border + reset.getWidth()), 70);
     
-    int contentHeight = ListLabel.getBottom() + 90;  // final vertical extent
-    contentArea.setBounds (0, 0, getWidth(), contentHeight);
+    int contentHeight = resetLabel.getBottom() + 90;  // final vertical extent
+    // Use viewport width (safe if viewport is trimmed or later you change widths)
+    contentArea.setBounds (0, 0, scrollView.getWidth(), contentHeight);
     scrollView.setViewPosition (0, static_cast<int> (lastScrollY)); // Restore scroll position
 }
 
@@ -231,8 +249,6 @@ void TextEditorPopup::resized()
 CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
-    if (juce::JUCEApplicationBase::isStandaloneApp()) { showAlertWindow(); } // Standalone only
-
     link1Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app1", Link1);
 	link2Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app2", Link2);
 	link3Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app3", Link3);
@@ -520,20 +536,50 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
 	InChannelSlider.updateText();
 	
 	resized(); // ensure immediate layout on load
+	
+	if (juce::JUCEApplicationBase::isStandaloneApp())
+	{	// Load toggle from persistent settings into the global used by getAppGroupDirectory()
+		selectDirectoryToggleState = getStandaloneSelectDirectoryToggleState();
+		// Show alert first, then autoload from its callback
+		if (! shouldSuppressStandaloneAlert()) {
+			juce::MessageManager::callAsync ([safe = SafePointer<CallAppAudioProcessorEditor>(this)]
+			{	if (safe == nullptr) return;
+				safe->showAlertWindow();
+			});
+		} else { triggerStandaloneAutoload(); }  // No alert -> autoload immediately
+	}
 }
 
 CallAppAudioProcessorEditor::~CallAppAudioProcessorEditor() {}
 
 //==============================================================================
-void CallAppAudioProcessorEditor::showAlertWindow() {
-    juce::NativeMessageBox::showMessageBoxAsync (juce::AlertWindow::NoIcon,
-        "URL Beamer", juce::CharPointer_UTF8
-        ("This is an AUv3 plugin intended to be loaded into a host like AUM. \
-        \n\nIt can however be run in standalone mode with limited features: \
-        \n\u2713 HyperLink Buttons\n\u2713 Save/Load settings shared\nwith plugin \
-        \n\u2718 No MIDI output"),
-        this  // associatedComponent: this = main editor window
+void CallAppAudioProcessorEditor::showAlertWindow()
+{
+    const auto message = juce::CharPointer_UTF8 (
+        "This is an AUv3 plugin intended to be loaded into a host app such as AUM."
+        "\n\nIt can however be run in standalone mode with limited features:"
+        "\n\u2713 HyperLink Buttons" "\n\u2713 Save/Load settings" "\n   (shared with plugin)"
+        "\n\u2718 No MIDI output"
     );
+    auto options = juce::MessageBoxOptions()
+        .withIconType (juce::MessageBoxIconType::NoIcon)
+        .withTitle ("URL Beamer")
+        .withMessage (message)
+        .withButton ("OK")                          // index 0 (blue)
+        .withButton ("Don't show this again")       // index 1
+        .withAssociatedComponent (this);
+    SafePointer<CallAppAudioProcessorEditor> safeThis (this);
+    
+    juce::NativeMessageBox::showAsync (options, [safeThis] (int result)
+    {
+        if (safeThis == nullptr)
+            return;
+        if (result == 0) { }                    // "OK"
+        else if (result == 1)
+        { setSuppressStandaloneAlert (true); }  // "Don't show again"
+        // Trigger autoload after the dialog is dismissed
+        safeThis->triggerStandaloneAutoload();
+    });
 }
 //==============================================================================
 void CallAppAudioProcessorEditor::paint (juce::Graphics& g)
@@ -544,7 +590,6 @@ void CallAppAudioProcessorEditor::paint (juce::Graphics& g)
 void CallAppAudioProcessorEditor::resized()
 {
     lastScrollY = scrollView.getViewPositionY(); // ← capture before layout
-    scrollView.setBounds (getLocalBounds());     // Full screen
     
     if (textEditorPopup)
         textEditorPopup->setBounds (getLocalBounds());
@@ -557,20 +602,38 @@ void CallAppAudioProcessorEditor::resized()
     if   (toggleState == true) { buttonRows = 2; }
     else                       { buttonRows = 1; }
     
-    auto top = 8;   // Default for Plugin
+    auto top = 8;   // Default for Plugin (content padding inside the viewport)
     auto border = 8;
-    if (juce::JUCEApplicationBase::isStandaloneApp()) {
-    	if (getHeight() > getWidth()) {                            // Portrait
-    		top = 54;            // Notch: 44 points, Dynamic Island: 48 points
-    		border = 8;
-    	} else {                                                   // Landscape
-    		top = 30;
-    		border = 54; }
-    }                            // if Plugin:
-    else if (getWidth() > 560) { // Save for GarageBand + iPhone SE 4' (w = 568 pt)
+    int pinnedTopInset = 0; // NON-scrolling inset (viewport pushed down)
+    
+    #if JUCE_IOS
+    if (juce::JUCEApplicationBase::isStandaloneApp()) {  // if Standalone:
+		const bool portrait = (getHeight() > getWidth());
+	              // iPad
+		if (isRunningOnIPad()) {
+            pinnedTopInset = 76;  // Stage Manager / gesture safe area
+            top = 6;  // Keep content padding small, because the big space is now "pinned"
+            border = portrait ? 8 : 64;  // Portrait : Landscape
+		} else {  // iPhone
+            if (portrait) {  // Portrait
+                top = 64;         // Notch: 44 points, Dynamic Island: 48 points
+                border = 8;
+            } else {         // Landscape
+                top = 30;
+                border = 64;
+        }   }
+    }  // if Plugin:
+    else if (getWidth() > 560) {  // Save for GarageBand + iPhone SE 4' (w = 568 pt)
 		top = 8;
-		border = 54;
+		border = 64;
 	}
+	#else  // (#elif) JUCE_MAC
+	top = 8;
+	if (getWidth() > 560) { border = 54; }
+	#endif
+	// IMPORTANT: apply pinned top inset to the viewport so it doesn't scroll away
+    scrollView.setBounds (getLocalBounds().withTrimmedTop (pinnedTopInset));
+	
     auto gap = 10;
 	auto textHeight = 22;
     auto buttonHeight = 44;
@@ -641,7 +704,8 @@ void CallAppAudioProcessorEditor::resized()
     int contentHeight = button4.getBottom() + 40; // final vertical extent
     if (exitColor.isVisible() || exitMidi.isVisible())
         { contentHeight = MidiThru.getBottom() + 120; }
-    scrollContent.setBounds (0, 0, getWidth(), contentHeight);
+    // Use viewport width (safe if viewport is trimmed or later you change widths)
+    scrollContent.setBounds (0, 0, scrollView.getWidth(), contentHeight);
     scrollView.setViewPosition (0, static_cast<int> (lastScrollY)); // ← restore after layout
 }
 
@@ -981,11 +1045,34 @@ void CallAppAudioProcessorEditor::closeFileChooser()
 }
 
 //==============================================================================
+void CallAppAudioProcessorEditor::triggerStandaloneAutoload()
+{
+    if (! getStandaloneOpenLastUsedFileOnStartup()) return;
+    // Safe Mode: if the last startup likely crashed during autoload, skip it once.
+    if (getStandaloneAutoloadInProgress()) {
+        setStandaloneAutoloadInProgress (false);
+        showMessage ("Autoload skipped (previous startup may have failed).", juce::Colours::red);
+        return;
+    }
+    if (! getStandaloneOpenLastUsedFileOnStartup()) return;
+
+    const auto path = getStandaloneLastUsedFilePath();
+    if (path.isEmpty()) return;
+
+    const juce::File f (path);
+    if (! f.existsAsFile()) return;
+    // Mark autoload as in-progress BEFORE actually loading.
+    setStandaloneAutoloadInProgress (true);
+
+    juce::MessageManager::callAsync ([safe = SafePointer<CallAppAudioProcessorEditor>(this), f]
+    {   if (safe == nullptr) return;
+        safe->loadSettings (f, false);  // Tell loadSettings to be quiet on success
+        // NOTE: we clear the in-progress flag after loadSettings returns.
+        setStandaloneAutoloadInProgress (false);
+    });
+}
 //==============================================================================
-
-// Initialize to default App Group Directory – iOS standalone
-bool selectDirectoryToggleState = false;
-
+//==============================================================================
 void CallAppAudioProcessorEditor::openMenu()
 {
     createFileChooser ("File Manager", "*.xml");
@@ -994,10 +1081,14 @@ void CallAppAudioProcessorEditor::openMenu()
         fileChooser->setToggleState (selectDirectoryToggleState);   // iOS standalone
     }                               // if not standalone: Default = false (Off/Plugin)
 
-    // Get the last used file from the ValueTreeState
-    auto& state = audioProcessor.getValueTreeState();
-    juce::String lastPath = state.state.getProperty ("lastUsedFile", "").toString();
-  
+    juce::String lastPath; // Get the last used file from Standalone-FilePath OR ValueTreeState
+	
+	if (juce::JUCEApplicationBase::isStandaloneApp()) {
+		lastPath = getStandaloneLastUsedFilePath();
+	} else {  // if Plugin:
+		auto& state = audioProcessor.getValueTreeState();
+		lastPath = state.state.getProperty ("lastUsedFile", "").toString();
+	}
     if (!lastPath.isEmpty())
     {
         juce::File lastFile (lastPath);
@@ -1006,22 +1097,22 @@ void CallAppAudioProcessorEditor::openMenu()
             fileChooser->setLastUsedFile (lastFile); // Pass the last used file
         }
     }
-
     fileChooser->onFileSelected = [this](juce::File selectedFile) 
     {
         lastUsedFile = selectedFile; // Update last used file locally
         
-        // Store the path in ValueTreeState for future recall
-        audioProcessor.getValueTreeState().state.setProperty
-        ("lastUsedFile", selectedFile.getFullPathName(), nullptr);
-
+        // Store the path in Standalone-FilePath / ValueTreeState for future recall
+        if (juce::JUCEApplicationBase::isStandaloneApp()) {
+			setStandaloneLastUsedFilePath (selectedFile.getFullPathName());
+		} else {
+			audioProcessor.getValueTreeState().state.setProperty
+			("lastUsedFile", selectedFile.getFullPathName(), nullptr);
+		}
         if (fileChooser->isInSaveMode()) // Dynamically check save mode
         {
             saveSettings (selectedFile);
-        }
-        else
-        {
-            loadSettings (selectedFile);
+        } else {
+            loadSettings (selectedFile, true); // showSuccessMessage = true
         }
         closeFileChooser(); // fileChooser.reset (delete FileChooser)
     };
@@ -1037,7 +1128,6 @@ void CallAppAudioProcessorEditor::saveSettings (const juce::File& saveFile)
     juce::File AppGroupDirectory = getAppGroupDirectory();
     juce::File saveFileInGroup = AppGroupDirectory.getChildFile (saveFile.getFileName());
 
-    DBG ("Attempting to save to: " << saveFileInGroup.getFullPathName());
         // Check if directory exists, create if not
     if (!AppGroupDirectory.exists()) {
         if (!AppGroupDirectory.createDirectory()) {
@@ -1056,7 +1146,6 @@ void CallAppAudioProcessorEditor::saveSettings (const juce::File& saveFile)
         juce::File testFile = AppGroupDirectory.getChildFile ("testWriteAccess.txt");
         if (testFile.create()) {
             testFile.deleteFile(); // Clean up after test
-            DBG ("Test file created successfully in directory.");
         } else {
             juce::Logger::writeToLog ("Cannot write to directory: " + AppGroupDirectory.getFullPathName());
             showMessage ("Cannot write to directory: \n" + AppGroupDirectory.getFullPathName(), juce::Colours::red);
@@ -1073,14 +1162,13 @@ void CallAppAudioProcessorEditor::saveSettings (const juce::File& saveFile)
     // Create an XML representation of the ValueTree 'parameters'
     if (auto xml = audioProcessor.createParametersXml()) 
     {
-    //  DBG ("Current ValueTree: " << audioProcessor.getParametersValueTree().toXmlString());
         if (!saveFile.replaceWithText (xml->toString()))
              { showMessage ("Failed to save settings.", juce::Colours::red); }
         else { showMessage ("Settings saved successfully.", juce::Colours::blue); }
     } else { showMessage ("Failed to serialize settings.", juce::Colours::red); }
 }
 
-void CallAppAudioProcessorEditor::loadSettings (const juce::File& loadFile)
+void CallAppAudioProcessorEditor::loadSettings (const juce::File& loadFile, bool showSuccessMessage)
 {
     if (!loadFile.existsAsFile()) {
         showMessage ("Error: Selected file does not exist.", juce::Colours::red);
@@ -1099,13 +1187,12 @@ void CallAppAudioProcessorEditor::loadSettings (const juce::File& loadFile)
         return;
     }
     // Apply the loaded state to the processor's tree state ('parameters')
-//  DBG ("Successfully loaded ValueTree: " << newState.toXmlString());
     audioProcessor.setParametersValueTree (newState);
-    DBG ("New ValueTree applied to parameters.");
     
     // Synchronize UI with the loaded state
     loadStateFromValueTree (audioProcessor.getParametersValueTree());
-    showMessage ("Settings loaded successfully.", juce::Colours::blue);
+    if (showSuccessMessage)  // showSuccessMessage = true
+        showMessage ("Settings loaded successfully.", juce::Colours::blue);
 }
 
 void CallAppAudioProcessorEditor::saveStateToValueTree()
@@ -1349,3 +1436,4 @@ void CallAppAudioProcessorEditor::showIOSContextMenu (juce::TextEditor& editor)
     lastCursorPosition = currentCursorPosition; // Updates the stored position
 }
 #endif
+

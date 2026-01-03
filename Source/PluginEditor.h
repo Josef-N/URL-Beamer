@@ -29,8 +29,8 @@ public:
     
     juce::TextEditor Name1, Name2, Name3, Name4, Name5, Name6, Name7, Name8,
                      text1, text2, text3, text4, text5, text6, text7, text8;
-    juce::TextButton OK, Cancel, Color, Note, List;
-    juce::Label Commit, CancelText, ListLabel;
+    juce::TextButton OK, Cancel, Color, Note, reset;
+    juce::Label Commit, CancelText, resetLabel;
     
     std::function<void()> onClose;
     std::function<void()> onColorButtonClick;
@@ -248,10 +248,11 @@ private:
     
     juce::File lastUsedFile; // Tracks the last file used (saved or loaded)
     
-    // Helper methods                 
+    // Helper methods
+    void triggerStandaloneAutoload();
     void editButtonClicked();
     void saveSettings (const juce::File& saveFile);
-    void loadSettings (const juce::File& loadFile);
+    void loadSettings (const juce::File& loadFile, bool showSuccessMessage = true);
     void openMenu();
     void createFileChooser (const juce::String& title, const juce::String& filePattern);
     void closeFileChooser();
