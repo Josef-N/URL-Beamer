@@ -4,10 +4,8 @@
 #include <JuceHeader.h>
 #include "AppUtilities.h"
 
-#if JUCE_IOS
- #import <UIKit/UIKit.h>
- @class UIInteraction;
-#endif
+#import <UIKit/UIKit.h>
+@class UIInteraction;
 
 // Define the global (declared as extern in AppUtilities.h)
 bool selectDirectoryToggleState = false;
@@ -27,9 +25,7 @@ juce::PropertiesFile& getStandaloneProperties()
         options.filenameSuffix    = "properties";     // -> "URL Beamer.properties"
         options.storageFormat     = juce::PropertiesFile::storeAsXML;
         options.commonToAllUsers  = false;
-       #if JUCE_MAC
-        options.osxLibrarySubFolder = "Application Support";
-       #endif
+        options.osxLibrarySubFolder  = "Application Support"; // important also in iOS !
 
         props = std::make_unique<juce::PropertiesFile> (options);
 //      juce::Logger::writeToLog ("Properties file: " + props->getFile().getFullPathName());
@@ -97,43 +93,86 @@ void setStandaloneAutoloadInProgress (bool inProgress)
 
 juce::File getAppGroupDirectory()
 {
-    #if JUCE_IOS
-        if (selectDirectoryToggleState)
-        {   // "Documents" Directory (Button On-state)
-            return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
-        }
-        else
-        {
-            // Default: AppGroup Directory (Off-state)
-            NSFileManager* fileManager = [NSFileManager defaultManager];
-            NSURL* groupURL = [fileManager containerURLForSecurityApplicationGroupIdentifier:@"group.com.JosefNovotny.URLBeamer"];
-            if (groupURL == nil)
-            {
-                juce::Logger::writeToLog ("Failed to locate App Group directory.");
-                return juce::File();
-            }
-            return juce::File ([groupURL.path UTF8String]);
-        }
-    #elif JUCE_MAC
-        return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("URL Beamer");
-    //  return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory).getChildFile ("URL Beamer");
-    #endif
+	if (selectDirectoryToggleState)
+	{   // "Documents" Directory (Button On-state)
+		return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+	}
+	else
+	{
+		// Default: AppGroup Directory (Off-state)
+		NSFileManager* fileManager = [NSFileManager defaultManager];
+		NSURL* groupURL = [fileManager containerURLForSecurityApplicationGroupIdentifier:@"group.com.JosefNovotny.URLBeamer"];
+		if (groupURL == nil)
+		{
+			juce::Logger::writeToLog ("Failed to locate App Group directory.");
+			return juce::File();
+		}
+		return juce::File ([groupURL.path UTF8String]);
+	}
 }
 
 //==============================================================================
 //==============================================================================
-#if JUCE_IOS
-
 // Detecting iPad (vs. iPhone)
+
 bool isRunningOnIPad()
 {
     return UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad;
 }
 //==============================================================================
+// Auto scroll
+int getIOSKeyboardOverlap (juce::Component& component, int clearance)
+{
+    if (auto* peer = component.getPeer())
+    {
+        if (auto* view = (UIView*) peer->getNativeHandle())
+        {
+            [view layoutIfNeeded];
+            const auto keyboardFrame = view.keyboardLayoutGuide.layoutFrame;
+            const auto keyboardHeight = CGRectGetHeight (keyboardFrame);
+            // When the keyboard is hidden, the keyboard layout guide
+            // only represents the bottom safe-area region.
+            if (keyboardHeight <= view.safeAreaInsets.bottom + 1.0)
+                return 0;
+            const auto componentBounds = peer->getAreaCoveredBy (component);
+            const auto componentBottom = static_cast<float> (componentBounds.getBottom());
+            auto keyboardTop = static_cast<float> (CGRectGetMinY (keyboardFrame));
+
+            if (! juce::JUCEApplicationBase::isStandaloneApp()  // iPhone – Plugin
+                && ! isRunningOnIPad() && view.window != nil)
+            {
+                const auto screenBounds = view.window.screen.bounds;
+                const auto windowFrame = view.window.frame;
+                const auto screenWidth = CGRectGetWidth (screenBounds);
+                const auto windowWidth = CGRectGetWidth (windowFrame);
+                constexpr CGFloat edgeTolerance = 2.0;
+                const bool usesFullDisplayWidth = std::abs (screenWidth - windowWidth) <= edgeTolerance;
+
+                if (usesFullDisplayWidth) {          // Plugin with Full Display Width, e.g. GarageBand
+                    const auto bottomOutsideWindow = juce::jmax (0.0, static_cast<double> (
+								CGRectGetMaxY (screenBounds) - CGRectGetMaxY (windowFrame)));
+					// Only compensate when the area below the plugin window
+					// is smaller than the keyboard area inside the window.
+					if (bottomOutsideWindow > 0.0 && bottomOutsideWindow < static_cast<double> (keyboardHeight))
+					{
+						keyboardTop -= static_cast<float> (bottomOutsideWindow);
+					}
+                }
+            }
+            const auto overlap = componentBottom + static_cast<float> (clearance) - keyboardTop;
+            return overlap > 0.0f ? juce::roundToInt (overlap) : 0;
+        }
+    }
+    return 0;
+}
+
+//==============================================================================
 // iOS 16+ Edit Menu delegate (Cut/Copy/Paste)
 #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 160000
 
-static juce::TextEditor* gCurrentMenuEditor = nullptr;
+static juce::Component::SafePointer<juce::TextEditor> gCurrentMenuEditor;
+API_AVAILABLE(ios(16.0))
+static UIEditMenuInteraction* gCurrentEditMenuInteraction = nil;
 
 @interface JuceEditMenuDelegate : NSObject <UIEditMenuInteractionDelegate>
 @end
@@ -147,15 +186,21 @@ static juce::TextEditor* gCurrentMenuEditor = nullptr;
     (void) interaction;
     (void) configuration;
 
-    juce::TextEditor* editor = gCurrentMenuEditor;
+    auto editor = gCurrentMenuEditor;
 
     const bool hasSelection = (editor != nullptr)
                            && (editor->getHighlightedRegion().getLength() > 0);
+    
+    const bool hasText = (editor != nullptr)
+                      && editor->getTotalNumChars() > 0;
+
+    const bool allTextSelected = hasText
+                              && editor->getHighlightedRegion().getStart() == 0
+                              && editor->getHighlightedRegion().getEnd()
+                                     == editor->getTotalNumChars();
 
     const bool canPaste = [[UIPasteboard generalPasteboard] hasStrings]
-                       || [[UIPasteboard generalPasteboard] hasURLs]
-                       || [[UIPasteboard generalPasteboard] hasImages]
-                       || [[UIPasteboard generalPasteboard] hasColors];
+                       || [[UIPasteboard generalPasteboard] hasURLs];
 
     UIAction* cutAction =
         [UIAction actionWithTitle:@"Cut"
@@ -164,8 +209,7 @@ static juce::TextEditor* gCurrentMenuEditor = nullptr;
                           handler:^(__kindof UIAction* action)
         {
             (void) action;
-            if (editor != nullptr)
-                editor->cutToClipboard();
+            if (editor != nullptr) editor->cutToClipboard();
         }];
 
     UIAction* copyAction =
@@ -175,8 +219,7 @@ static juce::TextEditor* gCurrentMenuEditor = nullptr;
                           handler:^(__kindof UIAction* action)
         {
             (void) action;
-            if (editor != nullptr)
-                editor->copyToClipboard();
+            if (editor != nullptr) editor->copyToClipboard();
         }];
 
     UIAction* pasteAction =
@@ -186,10 +229,28 @@ static juce::TextEditor* gCurrentMenuEditor = nullptr;
                           handler:^(__kindof UIAction* action)
         {
             (void) action;
-            if (editor != nullptr)
-                editor->pasteFromClipboard();
+            if (editor != nullptr) editor->pasteFromClipboard();
         }];
-
+        
+    UIAction* selectAllAction =
+		[UIAction actionWithTitle:@"Select All"
+							image:nil
+					   identifier:nil
+						  handler:^(__kindof UIAction* action)
+		{
+			(void) action;
+			if (editor == nullptr) return;
+			editor->selectAll();
+	
+			auto safeEditor = editor;
+			// Reopen the menu after UIKit has finished dismissing the current one.
+			juce::Timer::callAfterDelay (100, [safeEditor] {
+				if (safeEditor == nullptr) return;
+				if (safeEditor->getHighlightedRegion().getLength() > 0)
+					showIOSMenuNative (*safeEditor);
+			});
+		}];
+        
     // Disable items when they don't apply
     if (!hasSelection) {
         cutAction.attributes  = UIMenuElementAttributesDisabled;
@@ -197,13 +258,17 @@ static juce::TextEditor* gCurrentMenuEditor = nullptr;
     }
     if (!canPaste)
         pasteAction.attributes = UIMenuElementAttributesDisabled;
+        
+    if (!hasText || allTextSelected)
+        selectAllAction.attributes = UIMenuElementAttributesDisabled;
 
     NSMutableArray<UIMenuElement*>* children =
-        [NSMutableArray arrayWithObjects:cutAction, copyAction, pasteAction, nil];
+        [NSMutableArray arrayWithObjects:cutAction, copyAction, pasteAction, selectAllAction, nil];
 
-    // If you WANT Writing Tools / Apple suggestions as well, uncomment:
-    [children addObjectsFromArray:suggestedActions];
-    (void) suggestedActions;
+    // Include Writing Tools and other Apple-suggested actions:
+	[children addObjectsFromArray:suggestedActions];
+	// If suggestedActions are not included, use this instead to avoid an unused-parameter warning:
+	// (void) suggestedActions;
 
     return [UIMenu menuWithTitle:@"" children:children];
 }
@@ -223,37 +288,25 @@ static JuceEditMenuDelegate* getJuceEditMenuDelegate()
 
 void hideIOSMenuNative()
 {
-    auto* focused = juce::Component::getCurrentlyFocusedComponent();
-    auto* peer    = (focused != nullptr ? focused->getPeer() : nullptr);
-
-    if (peer != nullptr)
+    #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 160000
+    if (@available(iOS 16.0, *))
     {
-        if (auto* view = (UIView*) peer->getNativeHandle())
-        {
-            #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 160000
-            if (@available(iOS 16.0, *))
-            {
-                gCurrentMenuEditor = nullptr;
+        gCurrentMenuEditor = nullptr;
 
-                for (UIInteraction* interaction in view.interactions)
-                {
-                    if ([interaction isKindOfClass:[UIEditMenuInteraction class]])
-                    {
-                        UIEditMenuInteraction* editInteraction = (UIEditMenuInteraction*) interaction;
-                        [editInteraction dismissMenu];
-                    }
-                }
-            }
-            else
-            #endif
-            {
-                #pragma clang diagnostic push
-                #pragma clang diagnostic ignored "-Wdeprecated-declarations"  // legacy method
-                [[UIMenuController sharedMenuController] hideMenu];
-                #pragma clang diagnostic pop
-            }
+        if (gCurrentEditMenuInteraction != nil)
+        {
+            [gCurrentEditMenuInteraction dismissMenu];
+            gCurrentEditMenuInteraction = nil;
         }
+
+        return;
     }
+    #endif
+
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"  // legacy method
+    [[UIMenuController sharedMenuController] hideMenu];
+    #pragma clang diagnostic pop
 }
 
 void showIOSMenuNative (juce::Component& component)
@@ -262,24 +315,28 @@ void showIOSMenuNative (juce::Component& component)
     {
         if (auto* view = (UIView*) peer->getNativeHandle())
         {
-            // Compute target rect similar to previous (legacy) logic 
-            CGRect targetRect = CGRectMake (0, 0, view.bounds.size.width, view.bounds.size.height);
-
-            if (auto* textEditor = dynamic_cast<juce::TextEditor*> (&component))
-            {
-                juce::Point<int> editorTopLeft = textEditor->getScreenBounds().getPosition();
-                juce::Point<float> localPoint  = peer->globalToLocal (editorTopLeft.toFloat());
-
-                CGFloat menuX = localPoint.x + (textEditor->getWidth() - 100) * 0.5f;  // centered horizontally
-                CGFloat menuY = localPoint.y + 15;  // (+ x) Offset, possibly
-
-                targetRect = CGRectMake (menuX, menuY, 100, 30);
-            }
+            CGRect targetRect = view.bounds;
+			
+			if (auto* textEditor = dynamic_cast<juce::TextEditor*> (&component))
+			{
+				const auto editorBounds =
+					peer->getAreaCoveredBy (*textEditor);
+			
+				targetRect = CGRectMake (
+					static_cast<CGFloat> (editorBounds.getX()),
+					static_cast<CGFloat> (editorBounds.getY() + 15),  // (+ x) Offset
+					static_cast<CGFloat> (editorBounds.getWidth()),
+					static_cast<CGFloat> (editorBounds.getHeight()));
+			}
             #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 160000
             if (@available(iOS 16.0, *))
             {
                 // Track which JUCE editor should receive cut/copy/paste
-                gCurrentMenuEditor = dynamic_cast<juce::TextEditor*> (&component);
+                if (auto* textEditor = dynamic_cast<juce::TextEditor*> (&component))
+				{
+					gCurrentMenuEditor = juce::Component::SafePointer<juce::TextEditor> (textEditor);
+				}
+				else { gCurrentMenuEditor = {}; }
 
                 UIEditMenuInteraction* editInteraction = nil;
 
@@ -293,10 +350,12 @@ void showIOSMenuNative (juce::Component& component)
                     editInteraction = [[UIEditMenuInteraction alloc] initWithDelegate:getJuceEditMenuDelegate()];
                     [view addInteraction:editInteraction];
                 }
+                gCurrentEditMenuInteraction = editInteraction;
+                
                 UIEditMenuConfiguration* config =
                     [UIEditMenuConfiguration configurationWithIdentifier:nil
                                                              sourcePoint:CGPointMake (CGRectGetMidX (targetRect),
-                                                                                     CGRectGetMinY (targetRect))];
+                                                                                      CGRectGetMinY (targetRect))];
                 [editInteraction presentEditMenuWithConfiguration:config];
             }
             else
@@ -317,5 +376,3 @@ void showIOSMenuNative (juce::Component& component)
         }
     }
 }
-
-#endif // JUCE_IOS

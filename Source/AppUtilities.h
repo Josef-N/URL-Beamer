@@ -31,10 +31,12 @@ void setStandaloneOpenLastUsedFileOnStartup (bool shouldOpen);
 bool getStandaloneAutoloadInProgress();
 void setStandaloneAutoloadInProgress (bool inProgress);
 
-// --------------------------------------------------
-#if JUCE_IOS
+// iOS native edit menu -----------------------------
 void hideIOSMenuNative();
 void showIOSMenuNative (juce::Component& component);
 
+// Auto scroll
+int getIOSKeyboardOverlap (juce::Component& component, int clearance);
+
+// Device
 bool isRunningOnIPad();
-#endif

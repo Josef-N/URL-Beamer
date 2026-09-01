@@ -31,17 +31,18 @@ TextEditorPopup::TextEditorPopup
 		editor.setJustification (juce::Justification::centredLeft);  // 0xFF122566 blue, 0xFF161C3C dark blue
 		editor.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xFF161C3C));
 		editor.setHasFocusOutline (true);
-		editor.onFocusLost = [&editor, this] { 
-		    editor.setCaretPosition (0); // deselect All
+		editor.onFocusLost = [&editor, this] {
+		    hideIOSMenuNative();
+			editor.setCaretPosition (0); // deselect All
 			if (expandedEditor == &editor) expandedEditor = nullptr;
-		    lastScrollY = scrollView.getVerticalScrollBar().getCurrentRangeStart();
-		    resized(); };
+			if (lastAutoScrollEditor == &editor) lastAutoScrollEditor = nullptr;
+			lastScrollY = scrollView.getVerticalScrollBar().getCurrentRangeStart();
+			resized();
+		};
         juce::Timer::callAfterDelay (50, [this, &editor] { editor.setScrollToShowCursor (true);
                                                            editor.setCaretPosition (0); } );
-        editor.addMouseListener (this, false); // Register mouseUp + mouseEnter as MouseListener
-#if JUCE_IOS
+        editor.addMouseListener (this, false); // Register mouseDown + mouseUp as MouseListener
 		editor.onTextChange = []() { hideIOSMenuNative(); };
-#endif
 	};
 	allEditors = {
 	    &Name1, &text1, &Name2, &text2, &Name3, &text3, &Name4, &text4,
@@ -54,7 +55,7 @@ TextEditorPopup::TextEditorPopup
 		setupTextEditor (*editor);
 		contentArea.addAndMakeVisible (*editor);
 		editor->setExplicitFocusOrder (focusOrder++);  // Order for Tab key
-		editor->onReturnKey = [this] { OK.triggerClick(); };
+        editor->onReturnKey = [editor] { editor->giveAwayKeyboardFocus(); };
 	}
 	
     Name1.setText (button1.getButtonText()); // Load existing button text    
@@ -94,14 +95,9 @@ TextEditorPopup::TextEditorPopup
         Link6Ref.setURL (juce::URL::createWithoutParsing (text6.getText()));
         Link7Ref.setURL (juce::URL::createWithoutParsing (text7.getText()));
         Link8Ref.setURL (juce::URL::createWithoutParsing (text8.getText()));
-        // Sync the updated state to the ValueTree
-		if (auto* editor = dynamic_cast<CallAppAudioProcessorEditor*>(getParentComponent()))
-		{
-			editor->triggerStateSave();
-		}
-#if JUCE_IOS
+        // Notify the owning editor after the UI components have been updated.
+        if (onCommit) onCommit();
 		hideIOSMenuNative();
-#endif
         if (onClose) onClose(); // removeChildComponent, textEditorPopup.reset (= delete)
     };
 
@@ -152,97 +148,238 @@ void TextEditorPopup::paint (juce::Graphics& g)
 }
 
 void TextEditorPopup::resized()
-{ 
+{
     lastScrollY = scrollView.getViewPositionY(); // Capture current scroll position
-    
-    auto top = 8;   // Default for Plugin (content padding inside the viewport)
+
+    auto top = 8;   // Default content padding for the plugin
     auto border = 8;
-    int pinnedTopInset = 0; // NON-scrolling inset (viewport pushed down)
+    int pinnedTopInset = 0;  // NON-scrolling inset (viewport pushed down)
+    int pinnedLeftInset = 0;
+    int pinnedRightInset = 0;
     
-    #if JUCE_IOS
-    if (juce::JUCEApplicationBase::isStandaloneApp()) {  // if Standalone:
-		const bool portrait = (getHeight() > getWidth());
-	              // iPad
-		if (isRunningOnIPad()) {
-            pinnedTopInset = 76;  // Stage Manager / gesture safe area
-            top = 6;  // Keep content padding small, because the big space is now "pinned"
-            border = portrait ? 8 : 64;  // Portrait : Landscape
-		} else {  // iPhone
-            if (portrait) {  // Portrait
-                top = 64;         // Notch: 44 points, Dynamic Island: 48 points
-                border = 8;
-            } else {         // Landscape
-                top = 30;
-                border = 64;
-        }   }
-    }  // if Plugin:
-    else if (getWidth() > 560) {  // Save for GarageBand + iPhone SE 4' (w = 568 pt)
+	const bool portrait = getHeight() > getWidth();
+	
+	const auto* display = juce::Desktop::getInstance().getDisplays()
+							  .getDisplayForRect (getScreenBounds());
+	// Standalone:
+	if (juce::JUCEApplicationBase::isStandaloneApp()) {
+		if (display != nullptr) {
+			const auto safeInsets = display->safeAreaInsets;
+            // iPad
+            if (isRunningOnIPad()) {
+                pinnedTopInset = juce::jmax (76, safeInsets.getTop()); // Minimum for Stage Manager protection
+                top = 6;  // Keep content padding small, because the big space is now "pinned"
+                border = portrait ? 8 : 64;  // Portrait : Landscape
+            } else {
+            // iPhone
+                if (portrait) {    // Portrait
+                    // Protect the notch or Dynamic Island without adding side insets.
+                    pinnedTopInset = safeInsets.getTop(); // iPhone12 = 47 / iPhone17 = 62
+                    top = 8;
+                    border = 8;
+                } else {           // Landscape
+                    // Protect the notch or Dynamic Island on either horizontal side (symmetrical)
+					const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+					pinnedTopInset = safeInsets.getTop();
+					// Keep the viewport full-width so the side margins remain scrollable.
+					pinnedLeftInset = 0;
+					pinnedRightInset = 0;
+					top = 30;
+					border = horizontalSafeInset + 8; // iPhone12: = 47+8=55 / iPhone17: = 62+8=70
+        }   }   }
+        else {      // Fallback: Use fixed safe margins if no display information is available.
+			juce::Logger::writeToLog ("TextEditorPopup: no display found for screen bounds");
+			if (isRunningOnIPad()) {        // iPad
+				pinnedTopInset = 76;
+				top = 6;
+				border = portrait ? 8 : 64;
+			} else if (portrait) {          // iPhone / portrait
+				pinnedTopInset = 64;
+				top = 8;
+				border = 8;
+			} else {                        // iPhone / landscape
+				pinnedTopInset = 0;
+				top = 30;
+				border = 64;
+	}	}	}
+    // Plugin:
+	else if (! isRunningOnIPad() && ! portrait) {    // iPhone – landscape
+		if (display != nullptr) {
+			const auto safeInsets = display->safeAreaInsets;
+			const auto pluginBounds = getScreenBounds();
+			const auto displayBounds = display->logicalBounds;
+			
+			constexpr int edgeTolerance = 2;
+			
+			const bool usesFullDisplayWidth =
+				   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
+				&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
+	
+			if (usesFullDisplayWidth) {     // Plugin with Full Display Width, e.g. GarageBand
+				const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+				top = 8;
+				border = horizontalSafeInset + 8;
+			}
+			else if (getWidth() > 560) {    // if NOT Full Display Width
+				top = 8;
+				border = 64;
+		}	}
+		else if (getWidth() > 560) {    // Fallback, if display == nullptr
+			top = 8;
+			border = 64;
+	}	}
+	else if (isRunningOnIPad() && getWidth() > 560) {    // iPad – wide plugin layout
 		top = 8;
 		border = 64;
-	}
-	#else  // (#elif) JUCE_MAC
-	top = 8;
-	if (getWidth() > 560) { border = 54; }
-	#endif
-	// IMPORTANT: apply pinned top inset to the viewport so it doesn't scroll away
-    scrollView.setBounds (getLocalBounds().withTrimmedTop (pinnedTopInset));
-	
+	}   // Otherwise: defaults for plugin (top, border = 8), iPhone – portrait & iPad
+    
+    auto viewportBounds = getLocalBounds();
+    // IMPORTANT: apply pinned top inset to the viewport so it doesn't scroll away
+    viewportBounds.removeFromTop (pinnedTopInset);
+    viewportBounds.removeFromLeft (pinnedLeftInset);
+    viewportBounds.removeFromRight (pinnedRightInset);
+
+    scrollView.setBounds (viewportBounds);
+    const auto contentWidth = scrollView.getWidth();
+
     auto gap = 10;
-	auto textHeight = 30;  // Editor: 22
+    auto textHeight = 30;  // Editor: 22
     auto buttonHeight = 44;
-	auto rightButtonW = 50;
-	auto oneRowWidth =  (getWidth() - (2 * border + gap + rightButtonW));          // 1 button row
-	auto twoRowsWidth = (getWidth() - (2 * border + 2 * gap + rightButtonW)) / 2;  // 2 button rows
-	auto xPosRow2 = twoRowsWidth + border + gap;
-	
-	auto getWidthFor = [&](juce::TextEditor* editor) -> int {
-        return (editor == expandedEditor) ? oneRowWidth : twoRowsWidth;
+    auto rightButtonW = 50;
+    auto oneRowWidth =   contentWidth - (2 * border     + gap + rightButtonW);       // 1 button row
+    auto twoRowsWidth = (contentWidth - (2 * border + 2 * gap + rightButtonW)) / 2;  // 2 button rows
+    auto xPosRow2 = twoRowsWidth + border + gap;
+
+    auto getWidthFor = [&] (juce::TextEditor* editor) -> int {
+        return editor == expandedEditor ? oneRowWidth : twoRowsWidth;
     };
-    auto getXPosFor = [&](juce::TextEditor* editor, bool isRow1) -> int {
-        return (editor == expandedEditor) ? border : (isRow1 ? border : xPosRow2);
+    auto getXPosFor = [&] (juce::TextEditor* editor, bool isRow1) -> int {
+        return editor == expandedEditor ? border : (isRow1 ? border : xPosRow2);
     };
-	for (auto* editor : allEditors) {
-		if (editor != expandedEditor) editor->toBack();
-	}	
-	
+    for (auto* editor : allEditors) {
+        if (editor != expandedEditor) editor->toBack();
+    }
+
     Name1.setBounds (getXPosFor (&Name1, true), top,                     getWidthFor (&Name1), textHeight);
     text1.setBounds (getXPosFor (&text1, true), top + textHeight,        getWidthFor (&text1), textHeight);
 
     Name2.setBounds (getXPosFor (&Name2, true), text1.getBottom() + gap, getWidthFor (&Name2), textHeight);
     text2.setBounds (getXPosFor (&text2, true), Name2.getBottom(),       getWidthFor (&text2), textHeight);
-
+    
     Name3.setBounds (getXPosFor (&Name3, true), text2.getBottom() + gap, getWidthFor (&Name3), textHeight);
     text3.setBounds (getXPosFor (&text3, true), Name3.getBottom(),       getWidthFor (&text3), textHeight);
-
+    
     Name4.setBounds (getXPosFor (&Name4, true), text3.getBottom() + gap, getWidthFor (&Name4), textHeight);
     text4.setBounds (getXPosFor (&text4, true), Name4.getBottom(),       getWidthFor (&text4), textHeight);
-
+    
     Name5.setBounds (getXPosFor (&Name5, false), Name1.getY(), getWidthFor (&Name5), textHeight);
     text5.setBounds (getXPosFor (&text5, false), text1.getY(), getWidthFor (&text5), textHeight);
-
+    
     Name6.setBounds (getXPosFor (&Name6, false), Name2.getY(), getWidthFor (&Name6), textHeight);
     text6.setBounds (getXPosFor (&text6, false), text2.getY(), getWidthFor (&text6), textHeight);
-
+    
     Name7.setBounds (getXPosFor (&Name7, false), Name3.getY(), getWidthFor (&Name7), textHeight);
     text7.setBounds (getXPosFor (&text7, false), text3.getY(), getWidthFor (&text7), textHeight);
-
+    
     Name8.setBounds (getXPosFor (&Name8, false), Name4.getY(), getWidthFor (&Name8), textHeight);
     text8.setBounds (getXPosFor (&text8, false), text4.getY(), getWidthFor (&text8), textHeight);
     
-    OK.setBounds (getWidth() - border - rightButtonW, top,    rightButtonW, buttonHeight);
-    Cancel.setBounds     (OK.getX(), OK.getBottom() + gap,    rightButtonW, buttonHeight);
-    CancelText.setBounds (OK.getX(), Cancel.getY(),           rightButtonW, buttonHeight);
-    Note.setBounds       (OK.getX(), Name4.getY() + 16,       rightButtonW, buttonHeight);
-    Color.setBounds      (OK.getX(), Note.getY()  - 54,       rightButtonW, buttonHeight);
-    reset.setBounds      (border,    text4.getBottom() + 30,  60,           30);
+    OK.setBounds         (contentWidth - border - rightButtonW, top, rightButtonW, buttonHeight);
+    Cancel.setBounds     (OK.getX(), OK.getBottom() + gap,           rightButtonW, buttonHeight);
+    CancelText.setBounds (OK.getX(), Cancel.getY(),                  rightButtonW, buttonHeight);
+    Note.setBounds       (OK.getX(), Name4.getY() + 16,              rightButtonW, buttonHeight);
+    Color.setBounds      (OK.getX(), Note.getY()  - 54,              rightButtonW, buttonHeight);
+    reset.setBounds      (border,    text4.getBottom() + 30,         60,           30);
+
+    Commit.setBounds     (border,    text4.getBottom() + gap, contentWidth -  2 * border,                     16);
+    resetLabel.setBounds (reset.getRight(), reset.getY() + 8, contentWidth - (2 * border + reset.getWidth()), 30);
+
+    constexpr int bottomPadding = 8;            // final (variable) vertical extent
+	auto baseContentBottom = Commit.getBottom();
+	
+	if (resetLabel.isVisible()) baseContentBottom = juce::jmax (baseContentBottom, resetLabel.getBottom());
+	baseContentHeight = baseContentBottom + bottomPadding;
+	const int contentHeight = baseContentHeight + keyboardScrollReserve;
+	
+	contentArea.setBounds (0, 0, contentWidth, contentHeight);
+	scrollView.setViewPosition (0, static_cast<int> (lastScrollY)); // Restore scroll position
+}
+
+void TextEditorPopup::scrollEditorAboveKeyboard (juce::TextEditor& editor)
+{
+    juce::Component::SafePointer<TextEditorPopup> safeThis (this);
+    juce::Component::SafePointer<juce::TextEditor> safeEditor (&editor);
+
+    juce::Timer::callAfterDelay (300, [safeThis, safeEditor]
+    {
+        if (safeThis == nullptr || safeEditor == nullptr) return;
+        if (! safeEditor->hasKeyboardFocus (true)) return;
+
+        constexpr int clearance = 8;
+
+        // Add exactly as much temporary content as the keyboard covers.
+        const auto keyboardOverlap = getIOSKeyboardOverlap (safeThis->scrollView, clearance);
+
+        const auto unusedViewportSpace =
+            juce::jmax (0, safeThis->scrollView.getHeight() - safeThis->baseContentHeight);
+
+        // The reserve must also compensate for content that was
+        // shorter than the viewport before the keyboard appeared.
+        const auto requiredReserve = keyboardOverlap > 0
+				? keyboardOverlap + unusedViewportSpace
+				: 0;
+
+        if (safeThis->keyboardScrollReserve != requiredReserve) {
+            safeThis->keyboardScrollReserve = requiredReserve;
+            safeThis->resized();
+        }
+        if (safeThis->keyboardScrollReserve > 0) {
+			safeThis->scheduleKeyboardReserveCheck();
+		}
+		else { safeThis->lastAutoScrollEditor = nullptr; }
+        
+        const auto editorOverlap = getIOSKeyboardOverlap (*safeEditor, clearance);
+        const auto currentScrollY = safeThis->scrollView.getViewPositionY();
+        const auto maxScrollY =
+            juce::jmax (0, safeThis->contentArea.getHeight() - safeThis->scrollView.getHeight());
+
+        const auto newScrollY = editorOverlap > 0
+                ? juce::jlimit (0, maxScrollY, currentScrollY + editorOverlap)
+                : currentScrollY;
+
+        if (editorOverlap <= 0) return;
+
+        safeThis->scrollView.setViewPosition (0, newScrollY);
+        safeThis->lastScrollY = newScrollY;
+    });
+}
+
+void TextEditorPopup::scheduleKeyboardReserveCheck()
+{
+    if (keyboardReserveCheckScheduled || keyboardScrollReserve == 0)
+        return;
+    keyboardReserveCheckScheduled = true;
+    juce::Component::SafePointer<TextEditorPopup> safeThis (this);
     
-    Commit.setBounds     (border,           text4.getBottom() + gap,            getWidth() - (2 * border),  16);
-    resetLabel.setBounds (reset.getRight(), reset.getY() + 8, getWidth() - (2 * border + reset.getWidth()), 70);
-    
-    int contentHeight = resetLabel.getBottom() + 90;  // final vertical extent
-    // Use viewport width (safe if viewport is trimmed or later you change widths)
-    contentArea.setBounds (0, 0, scrollView.getWidth(), contentHeight);
-    scrollView.setViewPosition (0, static_cast<int> (lastScrollY)); // Restore scroll position
+    juce::Timer::callAfterDelay (250, [safeThis] {
+        if (safeThis == nullptr)
+            return;
+        safeThis->keyboardReserveCheckScheduled = false;
+        if (safeThis->keyboardScrollReserve == 0)
+            return;
+        if (getIOSKeyboardOverlap (safeThis->scrollView, 0) == 0)
+        {
+            safeThis->keyboardScrollReserve = 0;
+            // The keyboard may have been dismissed without a focus change.
+            safeThis->lastAutoScrollEditor = nullptr;
+            safeThis->resized();
+            // Keep the stored position in sync if the viewport was clamped
+            // after removing the temporary content reserve.
+            safeThis->lastScrollY = safeThis->scrollView.getViewPositionY();
+            return;
+        }
+        safeThis->scheduleKeyboardReserveCheck();
+    });
 }
 
 //==============================================================================
@@ -258,13 +395,6 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
 	link7Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app7", Link7);
 	link8Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app8", Link8);
 	
-	// Apply deferred state (editor is not open) if it exists, using the public getter
-    if (audioProcessor.getDeferredState().isValid())
-    {
-        loadStateFromValueTree (audioProcessor.getDeferredState());
-        audioProcessor.clearDeferredState();  // Clear after loading
-    }
- 
     setSize (500, 360);
     setResizable (true, false);
     setOpaque (true);
@@ -383,29 +513,25 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     midiNoteSlider.textFromValueFunction = [](double value) -> juce::String {
 		static const juce::StringArray noteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 		int midiNote = static_cast<int> (value);
-		int octave = (midiNote / 12) - 1; // MIDI note 60 = C4
+		int octave = (midiNote / 12) - 1;  // MIDI note 60 = C4
 		juce::String noteName = noteNames[midiNote % 12] + juce::String (octave);
-		return noteName + " (" + juce::String (midiNote) + ")"; // Example: "C4 (60)"
+		return noteName + " (" + juce::String (midiNote) + ")";  // Example: "C4 (60)"
 	};
 	midiNoteSlider.valueFromTextFunction = [](const juce::String& text) -> double {
 		static const juce::StringArray noteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
 		juce::String input = text.trim().toUpperCase();
-		for (int i = 0; i < 128; ++i) {  // Check if input is a valid note name
+		for (int i = 0; i < 128; ++i) {               // Check if input is a valid note name
 			int octave = (i / 12) - 1;
 			juce::String expectedNote = noteNames[i % 12] + juce::String (octave);
-			if (input == expectedNote) {
-				return static_cast<double>(i);
-			}
+			if (input == expectedNote) { return static_cast<double>(i); }
 		}
-		if (input.containsOnly ("0123456789")) {  // If input is purely a number
+		if (input.containsOnly ("0123456789")) {      // If input is purely a number
 			int midiNumber = input.getIntValue();
-			if (midiNumber >= 0 && midiNumber <= 127) {
-				return static_cast<double> (midiNumber);
-			}
+			if (midiNumber >= 0 && midiNumber <= 127) { return static_cast<double> (midiNumber); }
 		}
 		return 60.0; // Default to C4 if input is invalid
 	};
-    
+	
     scrollContent.addAndMakeVisible (midiNoteLabel);
     midiNoteLabel.setVisible (false);
     midiNoteLabel.setText ("Select button for Midi Note", juce::dontSendNotification);
@@ -418,6 +544,7 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     scrollContent.addAndMakeVisible (ChannelSlider);
     ChannelSlider.setViewportIgnoreDragFlag (true);
     ChannelSlider.setVisible (false);
+    ChannelSlider.addMouseListener (this, true); // true: Listen to any child component within this component
     ChannelSlider.setRange (0, 16, 1);
     ChannelSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 30, 22);
     ChannelSlider.onValueChange = [this] { updateChannelNumberFromSlider(); };
@@ -436,11 +563,15 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     scrollContent.addAndMakeVisible (InNoteSlider);
     InNoteSlider.setViewportIgnoreDragFlag (true);
     InNoteSlider.setVisible (false);
+    InNoteSlider.addMouseListener (this, true); // true: Listen to any child component within this component
     InNoteSlider.setRange (0, 120, 1); // Offset
     InNoteSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 40, 22);
     InNoteSlider.setValue (1, juce::sendNotificationSync);
-    InNoteSlider.onValueChange = [this]() { updateInInfoLabel(); };
-    
+    InNoteSlider.onValueChange = [this]() {
+        updateInInfoLabel();
+        if (! isApplyingProcessorState)
+        {   audioProcessor.setInputNoteRoot (static_cast<int> (InNoteSlider.getValue()));   }
+    };
     scrollContent.addAndMakeVisible (InChannelLabel);
     InChannelLabel.setVisible (false);
     InChannelLabel.setText ("Channel", juce::dontSendNotification);
@@ -448,7 +579,8 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     scrollContent.addAndMakeVisible (InChannelSlider);
     InChannelSlider.setViewportIgnoreDragFlag (true);
     InChannelSlider.setVisible (false);
-    InChannelSlider.setRange (0, 17, 1); // 0 = Off, 17 = Omni
+    InChannelSlider.addMouseListener (this, true); // true: Listen to any child component within this component
+    InChannelSlider.setRange (0, 17, 1);  // 0 = Off, 17 = Omni
     InChannelSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 30, 22);
     InChannelSlider.textFromValueFunction = [](double value) -> juce::String {
 		int val = static_cast<int> (value);
@@ -457,8 +589,11 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     InChannelSlider.valueFromTextFunction = [](const juce::String& text) -> double {
 		juce::String t = text.trim().toLowerCase();
 		if (t == "off") return 0; if (t == "all") return 17;
-		return t.getIntValue(); }; // fallback for numbers
-    
+		return t.getIntValue(); };                           // fallback for numbers
+    InChannelSlider.onValueChange = [this]() {
+        if (! isApplyingProcessorState)
+        {   audioProcessor.setInputChannel (static_cast<int> (InChannelSlider.getValue()));   }
+    };
     scrollContent.addAndMakeVisible (InInfoLabel);
     InInfoLabel.setVisible (false);
     InInfoLabel.setText (juce::CharPointer_UTF8
@@ -470,9 +605,13 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     MidiThru.setClickingTogglesState (true);
     MidiThru.setToggleState (false, juce::dontSendNotification); // Default = Pass Notes (off)
     MidiThru.setButtonText (MidiThru.getToggleState() ? "Block" : "Pass");
-	MidiThru.onClick = [this]() 
-	{ MidiThru.setButtonText (MidiThru.getToggleState() ? "Block" : "Pass"); };
-
+	MidiThru.onClick = [this]() {
+        const auto shouldBlock = MidiThru.getToggleState();
+        MidiThru.setButtonText (shouldBlock ? "Block" : "Pass");
+        if (! isApplyingProcessorState)
+            audioProcessor.setBlockMappedNotes (shouldBlock);
+    };
+    
     scrollContent.addAndMakeVisible (Edit);
     Edit.setColour (juce::TextButton::buttonColourId, juce::Colour (0xFF122566)); // steelblue
     Edit.setButtonText ("Edit");
@@ -531,26 +670,89 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     messageLabel.setFont (juce::Font (juce::FontOptions().withPointHeight (18.0f)));
     addChildComponent (messageLabel); // Fixed position, not part of scrollContent
     
+    // Apply the processor-owned state after all components and callbacks exist.
+    loadStateFromValueTree (audioProcessor.getAppStateCopy());
+    lastSeenStateRevision = audioProcessor.getStateRevision();
+
+    // Discard any stale triggers that may have been queued for an older editor.
+    int unusedTrigger = 0;
+    while (audioProcessor.popIncomingTrigger (unusedTrigger))
+    { }
+
+    audioProcessor.setEditorEventConsumerActive (true);
+    startTimerHz (60);
+
     // Defaults on load
   	ChannelSlider.updateText();   // Ensure "Off" (0) is shown
 	InChannelSlider.updateText();
 	
-	resized(); // ensure immediate layout on load
+	resized(); // Ensure immediate layout on load
 	
-	if (juce::JUCEApplicationBase::isStandaloneApp())
-	{	// Load toggle from persistent settings into the global used by getAppGroupDirectory()
+	if (juce::JUCEApplicationBase::isStandaloneApp()) 
+	{	// Reapply the layout after the native iOS view has reported valid safe-area insets.
+		juce::Timer::callAfterDelay (100, [safe = SafePointer<CallAppAudioProcessorEditor> (this)]
+			{   if (safe != nullptr)
+					safe->resized();
+			});
+		// Load toggle from persistent settings into the global used by getAppGroupDirectory()
 		selectDirectoryToggleState = getStandaloneSelectDirectoryToggleState();
 		// Show alert first, then autoload from its callback
 		if (! shouldSuppressStandaloneAlert()) {
-			juce::MessageManager::callAsync ([safe = SafePointer<CallAppAudioProcessorEditor>(this)]
+			juce::MessageManager::callAsync ([safe = SafePointer<CallAppAudioProcessorEditor> (this)]
 			{	if (safe == nullptr) return;
-				safe->showAlertWindow();
+					safe->showAlertWindow();
 			});
 		} else { triggerStandaloneAutoload(); }  // No alert -> autoload immediately
 	}
 }
 
-CallAppAudioProcessorEditor::~CallAppAudioProcessorEditor() {}
+CallAppAudioProcessorEditor::~CallAppAudioProcessorEditor()
+{
+    audioProcessor.setEditorEventConsumerActive (false);
+    stopTimer();
+}
+
+//==============================================================================
+void CallAppAudioProcessorEditor::timerCallback()
+{
+    const auto revision = audioProcessor.getStateRevision();
+
+    if (revision != lastSeenStateRevision)
+    {
+        const auto state = audioProcessor.getAppStateCopy();
+        loadStateFromValueTree (state);
+        lastSeenStateRevision = revision;
+    }
+    int buttonIndex = -1;
+
+    while (audioProcessor.popIncomingTrigger (buttonIndex))
+        triggerLinkForIndex (buttonIndex);
+}
+
+void CallAppAudioProcessorEditor::triggerLinkForIndex (int buttonIndex)
+{
+    std::array<juce::HyperlinkButton*, 8> links
+    {
+        &Link1, &Link2, &Link3, &Link4, &Link5, &Link6, &Link7, &Link8
+    };
+
+    if (juce::isPositiveAndBelow (buttonIndex, static_cast<int> (links.size())))
+    {
+        links[static_cast<std::size_t> (buttonIndex)]->triggerClick();
+    }
+}
+
+void CallAppAudioProcessorEditor::refreshFileChooserSelectionFromState (const juce::ValueTree& state)
+{
+    const auto lastPath = state.getProperty ("lastUsedFile", "").toString();
+
+    lastUsedFile = lastPath.isNotEmpty()
+        ? juce::File (lastPath)
+        : juce::File();
+
+    if (fileChooser != nullptr && lastUsedFile.existsAsFile())
+        fileChooser->setLastUsedFile (lastUsedFile);
+}
 
 //==============================================================================
 void CallAppAudioProcessorEditor::showAlertWindow()
@@ -603,37 +805,97 @@ void CallAppAudioProcessorEditor::resized()
     else                       { buttonRows = 1; }
     
     auto top = 8;   // Default for Plugin (content padding inside the viewport)
-    auto border = 8;
-    int pinnedTopInset = 0; // NON-scrolling inset (viewport pushed down)
-    
-    #if JUCE_IOS
-    if (juce::JUCEApplicationBase::isStandaloneApp()) {  // if Standalone:
-		const bool portrait = (getHeight() > getWidth());
-	              // iPad
-		if (isRunningOnIPad()) {
-            pinnedTopInset = 76;  // Stage Manager / gesture safe area
-            top = 6;  // Keep content padding small, because the big space is now "pinned"
-            border = portrait ? 8 : 64;  // Portrait : Landscape
-		} else {  // iPhone
-            if (portrait) {  // Portrait
-                top = 64;         // Notch: 44 points, Dynamic Island: 48 points
-                border = 8;
-            } else {         // Landscape
-                top = 30;
-                border = 64;
-        }   }
-    }  // if Plugin:
-    else if (getWidth() > 560) {  // Save for GarageBand + iPhone SE 4' (w = 568 pt)
+	auto border = 8;
+	int pinnedTopInset = 0;  // Non-scrolling inset above the viewport
+	
+	const bool portrait = getHeight() > getWidth();
+	
+	const auto* display = juce::Desktop::getInstance().getDisplays()
+							  .getDisplayForRect (getScreenBounds());
+	// Standalone:
+	if (juce::JUCEApplicationBase::isStandaloneApp()) {
+		if (display != nullptr) {
+			const auto safeInsets = display->safeAreaInsets;
+#if 0       // #if 0: don't compile (no logs); reactivate logs: #if 1
+			juce::Logger::writeToLog ("safe area"
+				  " | top: "    + juce::String (safeInsets.getTop())    + " | left: "  + juce::String (safeInsets.getLeft())
+				+ " | bottom: " + juce::String (safeInsets.getBottom()) + " | right: " + juce::String (safeInsets.getRight())
+				+ " | size: "   + juce::String (getWidth()) + " x " + juce::String (getHeight())
+				+ " | " + (portrait ? "portrait" : "landscape"));
+#endif      // iPad
+			if (isRunningOnIPad()) {
+				pinnedTopInset = juce::jmax (76, safeInsets.getTop()); // Minimum for Stage Manager protection
+				top = 6;  // Keep content padding small, because the big space is now "pinned"
+				border = portrait ? 8 : 64;  // Portrait : Landscape
+			}
+			// iPhone
+			else if (portrait) {    // Portrait
+				// Protect the notch or Dynamic Island above the viewport.
+				pinnedTopInset = safeInsets.getTop(); // iPhone12 = 47 / iPhone17 = 62
+				top = 8;
+				border = 8;
+			} else {                // Landscape
+				// Keep both landscape margins symmetrical and scrollable.
+				const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+				pinnedTopInset = safeInsets.getTop();
+				top = 30;
+				border = horizontalSafeInset + 8; // iPhone12: = 47+8=55 / iPhone17: = 62+8=70
+		}   }
+		else {            // Fallback: Use fixed safe margins if no display information is available.
+			juce::Logger::writeToLog ("CallAppAudioProcessorEditor: no display found for screen bounds");
+			if (isRunningOnIPad()) {        // iPad
+				pinnedTopInset = 76;
+				top = 6;
+				border = portrait ? 8 : 64;
+			}
+			else if (portrait) {            // iPhone / portrait
+				pinnedTopInset = 64;
+				top = 8;
+				border = 8;
+			} else {                        // iPhone / landscape
+				pinnedTopInset = 0;
+				top = 30;
+				border = 64;
+	}   }   }
+	// Plugin:
+	else if (! isRunningOnIPad() && ! portrait) {    // iPhone – landscape
+		if (display != nullptr) {
+			const auto safeInsets = display->safeAreaInsets;
+			const auto pluginBounds = getScreenBounds();
+			const auto displayBounds = display->logicalBounds;
+	
+			constexpr int edgeTolerance = 2;
+	
+			const bool usesFullDisplayWidth =
+				   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
+				&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
+	
+			if (usesFullDisplayWidth) {     // Plugin with Full Display Width, e.g. GarageBand
+				const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+				top = 8;
+				border = horizontalSafeInset + 8;
+			}
+			else if (getWidth() > 560) {    // if NOT Full Display Width
+				top = 8;
+				border = 64;
+		}   }
+		else if (getWidth() > 560) {    // Fallback, if display == nullptr
+			top = 8;                    // example: iPhone SE 4' (w = 568 pt)
+			border = 64;
+	}   }
+	else if (isRunningOnIPad() && getWidth() > 560) {    // iPad – wide plugin layout
 		top = 8;
 		border = 64;
-	}
-	#else  // (#elif) JUCE_MAC
-	top = 8;
-	if (getWidth() > 560) { border = 54; }
-	#endif
-	// IMPORTANT: apply pinned top inset to the viewport so it doesn't scroll away
-    scrollView.setBounds (getLocalBounds().withTrimmedTop (pinnedTopInset));
+	}   // Otherwise: defaults for plugin (top, border = 8), iPhone – portrait & iPad
 	
+	// Only the top inset is removed from the viewport.
+	// Horizontal safe areas remain scrollable content margins.
+	auto viewportBounds = getLocalBounds();
+	viewportBounds.removeFromTop (pinnedTopInset);
+	
+	scrollView.setBounds (viewportBounds);
+	const auto contentWidth = scrollView.getWidth();
+
     auto gap = 10;
 	auto textHeight = 22;
     auto buttonHeight = 44;
@@ -687,7 +949,7 @@ void CallAppAudioProcessorEditor::resized()
     InChannelLabel.setBounds  (ChannelLabel.getX(),  InNoteSlider.getY(),        60,                buttonHeight);
     InChannelSlider.setBounds (ChannelSlider.getX(), InNoteSlider.getY(), ChannelSlider.getWidth(), buttonHeight);
     
-    Edit.setBounds          (getWidth() - border - rightButtonW, top,      rightButtonW, buttonHeight);
+    Edit.setBounds          (contentWidth - border - rightButtonW, top,    rightButtonW, buttonHeight);
     ToggleRows.setBounds    (Edit.getX(),       button2.getY(),            rightButtonW, buttonHeight);
     menu.setBounds          (Edit.getX(),       button3.getY(),            rightButtonW, buttonHeight);
     Info.setBounds          (Edit.getX(),       button4.getY(),            rightButtonW, buttonHeight);
@@ -701,12 +963,96 @@ void CallAppAudioProcessorEditor::resized()
     MidiSendLabel.setBounds (border - 5,        button4.getBottom() + 8,   80,           16);
     messageLabel.setBounds  (border,            getHeight() - 50,          oneRowWidth,  44); // Fixed Y-position
     
-    int contentHeight = button4.getBottom() + 40; // final vertical extent
-    if (exitColor.isVisible() || exitMidi.isVisible())
-        { contentHeight = MidiThru.getBottom() + 120; }
-    // Use viewport width (safe if viewport is trimmed or later you change widths)
-    scrollContent.setBounds (0, 0, scrollView.getWidth(), contentHeight);
-    scrollView.setViewPosition (0, static_cast<int> (lastScrollY)); // ← restore after layout
+    constexpr int bottomPadding = 8;             // final (variable) vertical extent
+	auto baseContentBottom = button4.getBottom();
+	
+	if (colorRange.isVisible()) baseContentBottom = juce::jmax (baseContentBottom, colorRange.getBottom());
+	if (exitColor.isVisible())  baseContentBottom = juce::jmax (baseContentBottom, exitColor.getBottom());
+	if (MidiThru.isVisible())   baseContentBottom = juce::jmax (baseContentBottom, MidiThru.getBottom());
+	if (exitMidi.isVisible())   baseContentBottom = juce::jmax (baseContentBottom, exitMidi.getBottom());
+	baseContentHeight = baseContentBottom + bottomPadding;
+	const int contentHeight = baseContentHeight + keyboardScrollReserve;
+	// Use viewport width (safe if viewport is trimmed or later you change widths)
+	scrollContent.setBounds (0, 0, contentWidth, contentHeight);
+	scrollView.setViewPosition (0, static_cast<int> (lastScrollY));  // ← restore after layout
+}
+
+void CallAppAudioProcessorEditor::scrollEditorAboveKeyboard (juce::TextEditor& editor)
+{
+    juce::Component::SafePointer<CallAppAudioProcessorEditor> safeThis (this);
+    juce::Component::SafePointer<juce::TextEditor> safeEditor (&editor);
+
+    juce::Timer::callAfterDelay (300, [safeThis, safeEditor]
+    {
+        if (safeThis == nullptr || safeEditor == nullptr) return;
+        if (! safeEditor->hasKeyboardFocus (true)) return;
+        
+        constexpr int clearance = 8;
+        
+        // Add exactly as much temporary content as the keyboard covers.
+        const auto keyboardOverlap = getIOSKeyboardOverlap (safeThis->scrollView, clearance);
+
+        const auto unusedViewportSpace =
+            juce::jmax (0, safeThis->scrollView.getHeight() - safeThis->baseContentHeight);
+
+        // The reserve must also compensate for content that was
+        // shorter than the viewport before the keyboard appeared.
+        const auto requiredReserve =
+            keyboardOverlap > 0
+                ? keyboardOverlap + unusedViewportSpace
+                : 0;
+
+        if (safeThis->keyboardScrollReserve != requiredReserve) {
+            safeThis->keyboardScrollReserve = requiredReserve;
+            safeThis->resized();
+        }
+        if (safeThis->keyboardScrollReserve > 0) {
+            safeThis->scheduleKeyboardReserveCheck();
+        }
+        else { safeThis->lastAutoScrollEditor = nullptr; }
+
+        const auto editorOverlap = getIOSKeyboardOverlap (*safeEditor, clearance);
+        const auto currentScrollY = safeThis->scrollView.getViewPositionY();
+        const auto maxScrollY =
+            juce::jmax (0, safeThis->scrollContent.getHeight() - safeThis->scrollView.getHeight());
+
+        const auto newScrollY = editorOverlap > 0
+                ? juce::jlimit (0, maxScrollY, currentScrollY + editorOverlap)
+                : currentScrollY;
+
+        if (editorOverlap <= 0) return;
+
+        safeThis->scrollView.setViewPosition (0, newScrollY);
+        safeThis->lastScrollY = newScrollY;
+    });
+}
+
+void CallAppAudioProcessorEditor::scheduleKeyboardReserveCheck()
+{
+    if (keyboardReserveCheckScheduled || keyboardScrollReserve == 0)
+        return;
+    keyboardReserveCheckScheduled = true;
+    juce::Component::SafePointer<CallAppAudioProcessorEditor> safeThis (this);
+
+    juce::Timer::callAfterDelay (250, [safeThis] {
+        if (safeThis == nullptr)
+            return;
+        safeThis->keyboardReserveCheckScheduled = false;
+        if (safeThis->keyboardScrollReserve == 0)
+            return;
+        if (getIOSKeyboardOverlap (safeThis->scrollView, 0) == 0)
+        {
+            safeThis->keyboardScrollReserve = 0;
+            // The keyboard may have been dismissed without a focus change.
+            safeThis->lastAutoScrollEditor = nullptr;
+            safeThis->resized();
+            // Keep the stored position in sync if the viewport was clamped
+            // after removing the temporary content reserve.
+            safeThis->lastScrollY = safeThis->scrollView.getViewPositionY();
+            return;
+        }
+        safeThis->scheduleKeyboardReserveCheck();
+    });
 }
 
 void CallAppAudioProcessorEditor::flashButton (juce::TextButton* button)
@@ -754,13 +1100,28 @@ void CallAppAudioProcessorEditor::updateButtonColorFromSlider()
 {
     if (selectedButton != nullptr)
     {
-        auto colorValue = static_cast<int> (ColorSlider.getValue());
-        juce::String hexValue = juce::String::toHexString (colorValue).paddedLeft ('0', 6).toUpperCase();
-        juce::String fullHex = "FF" + hexValue;  // Full opacity
+        const auto colorValue = static_cast<int> (ColorSlider.getValue());
+        const auto hexValue = juce::String::toHexString (colorValue).paddedLeft ('0', 6).toUpperCase();
+        const auto fullHex = "FF" + hexValue;  // Full opacity
         selectedButton->setColour (juce::TextButton::buttonColourId, juce::Colour::fromString (fullHex));
-        ColorSlider.setTextValueSuffix ("" + hexValue);     
-    }
-    else { showMessage ("No button selected for color change.", juce::Colour (0xFFA100C4)); }
+        ColorSlider.setTextValueSuffix (hexValue);
+        
+        if (! isApplyingProcessorState) {
+            int index = 0;
+            if      (selectedButton == &button1) index = 1;
+            else if (selectedButton == &button2) index = 2;
+            else if (selectedButton == &button3) index = 3;
+            else if (selectedButton == &button4) index = 4;
+            else if (selectedButton == &button5) index = 5;
+            else if (selectedButton == &button6) index = 6;
+            else if (selectedButton == &button7) index = 7;
+            else if (selectedButton == &button8) index = 8;
+            if (index > 0) {
+                audioProcessor.setAppProperty (
+                    juce::Identifier { "Color" + juce::String (index) }, fullHex);
+            }
+        }
+    } else { showMessage ("No button selected for color change.", juce::Colour (0xFFA100C4)); }
 }
 
 void CallAppAudioProcessorEditor::updateSliderFromButton()
@@ -768,8 +1129,8 @@ void CallAppAudioProcessorEditor::updateSliderFromButton()
     if (selectedButton != nullptr)
     {
         auto color = selectedButton->findColour (juce::TextButton::buttonColourId);
-        auto colorValue = color.getARGB() & 0xFFFFFF; // Extract RGB value (without alpha)
-        if (colorRange.getToggleState() == true) {    // 118 steps
+        auto colorValue = color.getARGB() & 0xFFFFFF;    // Extract RGB value (without alpha)
+        if (colorRange.getToggleState() == true) {       // 118 steps
             // temporarily set the color to "0" to force slider value change
             ColorSlider.setValue (0, juce::sendNotificationSync); }
         updateColorSliderRange(); // if the range is changed by the toggle
@@ -781,10 +1142,25 @@ void CallAppAudioProcessorEditor::updateButtonTextColor()
 {
     if (selectedButton != nullptr)
     {
-        juce::Colour textColor = TextColor.getToggleState() ? juce::Colours::black : juce::Colours::white;
+        const auto textColor = TextColor.getToggleState() ? juce::Colours::black : juce::Colours::white;
         selectedButton->setColour (juce::TextButton::textColourOffId, textColor);
-    }
-    else { showMessage ("No button selected for text color change.", juce::Colour (0xFFA100C4)); }
+
+        if (! isApplyingProcessorState) {
+            int index = 0;
+            if      (selectedButton == &button1) index = 1;
+            else if (selectedButton == &button2) index = 2;
+            else if (selectedButton == &button3) index = 3;
+            else if (selectedButton == &button4) index = 4;
+            else if (selectedButton == &button5) index = 5;
+            else if (selectedButton == &button6) index = 6;
+            else if (selectedButton == &button7) index = 7;
+            else if (selectedButton == &button8) index = 8;
+            if (index > 0) {
+                audioProcessor.setAppProperty (
+                    juce::Identifier { "TextColor" + juce::String (index) }, textColor.toString());
+            }
+        }
+    } else { showMessage ("No button selected for text color change.", juce::Colour (0xFFA100C4)); }
 }
 
 void CallAppAudioProcessorEditor::syncTextColorToggle()
@@ -812,12 +1188,28 @@ void CallAppAudioProcessorEditor::updateNoteNumberFromSlider()
 {
     if (selectedButton != nullptr)
     {
-        int midiNote = static_cast<int> (midiNoteSlider.getValue());
-        int midiChannel = selectedButton->getComponentID().fromFirstOccurrenceOf ("_", false, false).getIntValue();
-        // Store both note and channel inside the ComponentID
-        selectedButton->setComponentID (juce::String (midiNote) + "_" + juce::String (midiChannel));
-    }
-    else { showMessage ("No button selected for Note Number change.", juce::Colour (0xFFA100C4)); }
+        const auto midiNote = static_cast<int> (midiNoteSlider.getValue());
+        const auto midiChannel =
+            selectedButton->getComponentID().fromFirstOccurrenceOf ("_", false, false).getIntValue();
+        const auto storedData = juce::String (midiNote) + "_" + juce::String (midiChannel);
+        selectedButton->setComponentID (storedData);
+
+        if (! isApplyingProcessorState) {
+            int index = 0;
+            if      (selectedButton == &button1) index = 1;
+            else if (selectedButton == &button2) index = 2;
+            else if (selectedButton == &button3) index = 3;
+            else if (selectedButton == &button4) index = 4;
+            else if (selectedButton == &button5) index = 5;
+            else if (selectedButton == &button6) index = 6;
+            else if (selectedButton == &button7) index = 7;
+            else if (selectedButton == &button8) index = 8;
+            if (index > 0) {
+                audioProcessor.setAppProperty (
+                    juce::Identifier { "button" + juce::String (index) + "Data" }, storedData);
+            }
+        }
+    } else { showMessage ("No button selected for Note Number change.", juce::Colour (0xFFA100C4)); }
 }
 
 void CallAppAudioProcessorEditor::updateNoteSliderFromButton()
@@ -842,10 +1234,27 @@ void CallAppAudioProcessorEditor::updateChannelNumberFromSlider()
 {
     if (selectedButton != nullptr)
     {
-        int midiChannel = static_cast<int> (ChannelSlider.getValue());
-        int midiNote = selectedButton->getComponentID().upToFirstOccurrenceOf ("_", false, false).getIntValue();
-        // Store both channel and note inside the ComponentID
-        selectedButton->setComponentID (juce::String (midiNote) + "_" + juce::String (midiChannel));
+        const auto midiChannel = static_cast<int> (ChannelSlider.getValue());
+        const auto midiNote =
+            selectedButton->getComponentID().upToFirstOccurrenceOf ("_", false, false).getIntValue();
+        const auto storedData = juce::String (midiNote) + "_" + juce::String (midiChannel);
+        selectedButton->setComponentID (storedData);
+
+        if (! isApplyingProcessorState) {
+            int index = 0;
+            if      (selectedButton == &button1) index = 1;
+            else if (selectedButton == &button2) index = 2;
+            else if (selectedButton == &button3) index = 3;
+            else if (selectedButton == &button4) index = 4;
+            else if (selectedButton == &button5) index = 5;
+            else if (selectedButton == &button6) index = 6;
+            else if (selectedButton == &button7) index = 7;
+            else if (selectedButton == &button8) index = 8;
+            if (index > 0) {
+                audioProcessor.setAppProperty (
+                    juce::Identifier { "button" + juce::String (index) + "Data" }, storedData);
+            }
+        }
     }
     else { showMessage ("No button selected for Channel change.", juce::Colour (0xFFA100C4)); }
 }
@@ -903,8 +1312,7 @@ void CallAppAudioProcessorEditor::updateNoteNumberFromLink (juce::TextButton* li
 			audioProcessor.sendMidiNoteOn (midiNote, 100, midiChannel);
 			juce::Timer::callAfterDelay (100, [this, midiNote, midiChannel]()
 			{ audioProcessor.sendMidiNoteOn (midiNote, 0, midiChannel); } );
-		}
-	}
+	}   }
 }
 
 void CallAppAudioProcessorEditor::NoteOnOff (juce::TextButton* linkedButton, bool isNoteOn)
@@ -923,8 +1331,7 @@ void CallAppAudioProcessorEditor::NoteOnOff (juce::TextButton* linkedButton, boo
                 int velocity = isNoteOn ? 100 : 0;
                 audioProcessor.sendMidiNoteOn (midiNote, velocity, midiChannel);
             }
-        }
-    }
+    }    }
 }
 
 void CallAppAudioProcessorEditor::updateInInfoLabel()
@@ -958,13 +1365,11 @@ void CallAppAudioProcessorEditor::editButtonClicked()
          Link1, Link2, Link3, Link4, Link5, Link6, Link7, Link8);
         addAndMakeVisible (textEditorPopup.get());
          
-        textEditorPopup->onColorButtonClick = [this]() {
-            ColorButtonClicked();
-        };
-        textEditorPopup->onNoteButtonClick = [this]() {
-            NoteButtonClicked();
-        };
-        textEditorPopup->onClose = [this]() {
+        textEditorPopup->onColorButtonClick = [this]() { ColorButtonClicked(); };
+        textEditorPopup->onNoteButtonClick =  [this]() { NoteButtonClicked(); };
+        
+        textEditorPopup->onCommit = [this]() { saveStateToValueTree(); };
+        textEditorPopup->onClose =  [this]() {
             removeChildComponent (textEditorPopup.get());
             textEditorPopup.reset();
         };
@@ -984,55 +1389,12 @@ void CallAppAudioProcessorEditor::showMessage (const juce::String& message, juce
 
 //==============================================================================
 //==============================================================================
-void CallAppAudioProcessorEditor::handleIncomingMidiNote (int midiNoteNumber, int midiChannel)
-{
-    int inChannel = static_cast<int>(InChannelSlider.getValue()); // 0 = Off, 17 = Omni
-    if (inChannel == 0) return;
-    if (inChannel != 17 && midiChannel != inChannel) return;
-
-    int rootNote = static_cast<int>(InNoteSlider.getValue()); // Offset slider
-    int index = midiNoteNumber - rootNote;
-
-    if (index < 0 || index >= 8)
-        return; // Outside the triggerable range
-
-    juce::HyperlinkButton* targetLink = nullptr;
-
-    static juce::HyperlinkButton* links[8] = {
-        &Link1, &Link2, &Link3, &Link4, &Link5, &Link6, &Link7, &Link8
-    };
-
-    targetLink = links[index];
-
-    if (targetLink) // is equal to: if (targetLink != nullptr)
-        targetLink->triggerClick();
-}
-
-int CallAppAudioProcessorEditor::getInputChannel() const
-{ return static_cast<int> (InChannelSlider.getValue()); }
-
-int CallAppAudioProcessorEditor::getInputNoteRoot() const
-{ return static_cast<int> (InNoteSlider.getValue()); }
-
-bool CallAppAudioProcessorEditor::shouldBlockNotes() const
-{ return MidiThru.getToggleState(); } // Block notes when MidiThru is ON (true)
-
-//==============================================================================
-//==============================================================================
 void CallAppAudioProcessorEditor::createFileChooser (const juce::String& title,
         const juce::String& filePattern)
 {
     juce::File initialDir = getAppGroupDirectory(); // Use the helper function
-/*
-// This will prevent methods in load/saveSettings, if the directory is not created
-    if (!initialDir.exists()) {
-        if (!initialDir.createDirectory()) {
-            juce::Logger::writeToLog ("Failed to create directory at: " + initialDir.getFullPathName());
-            showMessage ("Failed to create directory for file chooser.", juce::Colours::red);
-            return; // Exit if we cannot create the directory, no point in proceeding
-        }
-    }   // Better to delete this and continue here:
-*/
+    // Directory creation and write access are checked in saveSettings()
+    
     fileChooser = std::make_unique<CustomFileChooser> (title, initialDir, filePattern);
        
     addAndMakeVisible (fileChooser.get());
@@ -1076,18 +1438,14 @@ void CallAppAudioProcessorEditor::triggerStandaloneAutoload()
 void CallAppAudioProcessorEditor::openMenu()
 {
     createFileChooser ("File Manager", "*.xml");
-    
-    if (juce::JUCEApplicationBase::isStandaloneApp()) {
-        fileChooser->setToggleState (selectDirectoryToggleState);   // iOS standalone
-    }                               // if not standalone: Default = false (Off/Plugin)
 
     juce::String lastPath; // Get the last used file from Standalone-FilePath OR ValueTreeState
 	
 	if (juce::JUCEApplicationBase::isStandaloneApp()) {
 		lastPath = getStandaloneLastUsedFilePath();
-	} else {  // if Plugin:
-		auto& state = audioProcessor.getValueTreeState();
-		lastPath = state.state.getProperty ("lastUsedFile", "").toString();
+	} else {       // if Plugin:
+        lastPath = audioProcessor.getAppProperty (
+            juce::Identifier { "lastUsedFile" }, "").toString();
 	}
     if (!lastPath.isEmpty())
     {
@@ -1099,14 +1457,14 @@ void CallAppAudioProcessorEditor::openMenu()
     }
     fileChooser->onFileSelected = [this](juce::File selectedFile) 
     {
-        lastUsedFile = selectedFile; // Update last used file locally
+        lastUsedFile = selectedFile; // Keep the editor state in sync
         
         // Store the path in Standalone-FilePath / ValueTreeState for future recall
         if (juce::JUCEApplicationBase::isStandaloneApp()) {
 			setStandaloneLastUsedFilePath (selectedFile.getFullPathName());
-		} else {
-			audioProcessor.getValueTreeState().state.setProperty
-			("lastUsedFile", selectedFile.getFullPathName(), nullptr);
+		} else {           // if Plugin:
+            audioProcessor.setAppProperty (
+                juce::Identifier { "lastUsedFile" }, selectedFile.getFullPathName());
 		}
         if (fileChooser->isInSaveMode()) // Dynamically check save mode
         {
@@ -1124,7 +1482,7 @@ void CallAppAudioProcessorEditor::openMenu()
 
 void CallAppAudioProcessorEditor::saveSettings (const juce::File& saveFile)
 {   
-    // Get the specific directory based on the platform (iOS or macOS)
+    // Get the specific directory based on the platform (only iOS, no more macOS)
     juce::File AppGroupDirectory = getAppGroupDirectory();
     juce::File saveFileInGroup = AppGroupDirectory.getChildFile (saveFile.getFileName());
 
@@ -1159,8 +1517,8 @@ void CallAppAudioProcessorEditor::saveSettings (const juce::File& saveFile)
     
     saveStateToValueTree(); // Update the ValueTree before saving
     
-    // Create an XML representation of the ValueTree 'parameters'
-    if (auto xml = audioProcessor.createParametersXml()) 
+    // Create an XML representation of the processor-owned state.
+    if (auto xml = audioProcessor.createAppStateXml())
     {
         if (!saveFile.replaceWithText (xml->toString()))
              { showMessage ("Failed to save settings.", juce::Colours::red); }
@@ -1186,71 +1544,76 @@ void CallAppAudioProcessorEditor::loadSettings (const juce::File& loadFile, bool
         showMessage ("Invalid preset file.", juce::Colours::red);
         return;
     }
-    // Apply the loaded state to the processor's tree state ('parameters')
-    audioProcessor.setParametersValueTree (newState);
-    
-    // Synchronize UI with the loaded state
-    loadStateFromValueTree (audioProcessor.getParametersValueTree());
+    if (newState.getType() != juce::Identifier { "PARAMETERS" }) {
+        showMessage ("Invalid preset file.", juce::Colours::red);
+        return;
+    }
+
+    // Replace the processor-owned state. This also updates the realtime MIDI copies.
+    audioProcessor.replaceAppState (newState, true);
+    // Apply the new state immediately on the message thread.
+    timerCallback();
+
     if (showSuccessMessage)  // showSuccessMessage = true
         showMessage ("Settings loaded successfully.", juce::Colours::blue);
 }
 
 void CallAppAudioProcessorEditor::saveStateToValueTree()
 {
-    auto& state = audioProcessor.getValueTreeState().state;
+    audioProcessor.setAppProperty ("button1Text", button1.getButtonText());
+    audioProcessor.setAppProperty ("button2Text", button2.getButtonText());
+    audioProcessor.setAppProperty ("button3Text", button3.getButtonText());
+    audioProcessor.setAppProperty ("button4Text", button4.getButtonText());
+    audioProcessor.setAppProperty ("button5Text", button5.getButtonText());
+    audioProcessor.setAppProperty ("button6Text", button6.getButtonText());
+    audioProcessor.setAppProperty ("button7Text", button7.getButtonText());
+    audioProcessor.setAppProperty ("button8Text", button8.getButtonText());
+    audioProcessor.setAppProperty ("link1URL", Link1.getURL().toString (true));
+    audioProcessor.setAppProperty ("link2URL", Link2.getURL().toString (true));
+    audioProcessor.setAppProperty ("link3URL", Link3.getURL().toString (true));
+    audioProcessor.setAppProperty ("link4URL", Link4.getURL().toString (true));
+    audioProcessor.setAppProperty ("link5URL", Link5.getURL().toString (true));
+    audioProcessor.setAppProperty ("link6URL", Link6.getURL().toString (true));
+    audioProcessor.setAppProperty ("link7URL", Link7.getURL().toString (true));
+    audioProcessor.setAppProperty ("link8URL", Link8.getURL().toString (true));
+    audioProcessor.setAppProperty ("Color1", button1.findColour (juce::TextButton::buttonColourId).toString());
+    audioProcessor.setAppProperty ("Color2", button2.findColour (juce::TextButton::buttonColourId).toString());
+    audioProcessor.setAppProperty ("Color3", button3.findColour (juce::TextButton::buttonColourId).toString());
+    audioProcessor.setAppProperty ("Color4", button4.findColour (juce::TextButton::buttonColourId).toString());
+    audioProcessor.setAppProperty ("Color5", button5.findColour (juce::TextButton::buttonColourId).toString());
+    audioProcessor.setAppProperty ("Color6", button6.findColour (juce::TextButton::buttonColourId).toString());
+    audioProcessor.setAppProperty ("Color7", button7.findColour (juce::TextButton::buttonColourId).toString());
+    audioProcessor.setAppProperty ("Color8", button8.findColour (juce::TextButton::buttonColourId).toString());
+    audioProcessor.setAppProperty ("TextColor1", button1.findColour (juce::TextButton::textColourOffId).toString());
+    audioProcessor.setAppProperty ("TextColor2", button2.findColour (juce::TextButton::textColourOffId).toString());
+    audioProcessor.setAppProperty ("TextColor3", button3.findColour (juce::TextButton::textColourOffId).toString());
+    audioProcessor.setAppProperty ("TextColor4", button4.findColour (juce::TextButton::textColourOffId).toString());
+    audioProcessor.setAppProperty ("TextColor5", button5.findColour (juce::TextButton::textColourOffId).toString());
+    audioProcessor.setAppProperty ("TextColor6", button6.findColour (juce::TextButton::textColourOffId).toString());
+    audioProcessor.setAppProperty ("TextColor7", button7.findColour (juce::TextButton::textColourOffId).toString());
+    audioProcessor.setAppProperty ("TextColor8", button8.findColour (juce::TextButton::textColourOffId).toString());
+    audioProcessor.setAppProperty ("button1Data", button1.getComponentID());
+    audioProcessor.setAppProperty ("button2Data", button2.getComponentID());
+    audioProcessor.setAppProperty ("button3Data", button3.getComponentID());
+    audioProcessor.setAppProperty ("button4Data", button4.getComponentID());
+    audioProcessor.setAppProperty ("button5Data", button5.getComponentID());
+    audioProcessor.setAppProperty ("button6Data", button6.getComponentID());
+    audioProcessor.setAppProperty ("button7Data", button7.getComponentID());
+    audioProcessor.setAppProperty ("button8Data", button8.getComponentID());
+    audioProcessor.setInputNoteRoot (static_cast<int> (InNoteSlider.getValue()));
+    audioProcessor.setInputChannel  (static_cast<int> (InChannelSlider.getValue()));
+    audioProcessor.setBlockMappedNotes (MidiThru.getToggleState());
 
-    // Save button and URL states to the ValueTree
-    state.setProperty ("button1Text", button1.getButtonText(), nullptr);
-    state.setProperty ("button2Text", button2.getButtonText(), nullptr);
-    state.setProperty ("button3Text", button3.getButtonText(), nullptr);
-    state.setProperty ("button4Text", button4.getButtonText(), nullptr);
-    state.setProperty ("button5Text", button5.getButtonText(), nullptr);
-    state.setProperty ("button6Text", button6.getButtonText(), nullptr);
-    state.setProperty ("button7Text", button7.getButtonText(), nullptr);
-    state.setProperty ("button8Text", button8.getButtonText(), nullptr);
-    state.setProperty ("link1URL", Link1.getURL().toString (true), nullptr);
-    state.setProperty ("link2URL", Link2.getURL().toString (true), nullptr);
-    state.setProperty ("link3URL", Link3.getURL().toString (true), nullptr);
-    state.setProperty ("link4URL", Link4.getURL().toString (true), nullptr);
-    state.setProperty ("link5URL", Link5.getURL().toString (true), nullptr);
-    state.setProperty ("link6URL", Link6.getURL().toString (true), nullptr);
-    state.setProperty ("link7URL", Link7.getURL().toString (true), nullptr);
-    state.setProperty ("link8URL", Link8.getURL().toString (true), nullptr);
-    state.setProperty ("Color1", button1.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
-    state.setProperty ("Color2", button2.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
-    state.setProperty ("Color3", button3.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
-    state.setProperty ("Color4", button4.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
-    state.setProperty ("Color5", button5.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
-    state.setProperty ("Color6", button6.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
-    state.setProperty ("Color7", button7.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
-    state.setProperty ("Color8", button8.findColour (juce::TextButton::buttonColourId).toString(), nullptr);
-    state.setProperty ("TextColor1", button1.findColour (juce::TextButton::textColourOffId).toString(), nullptr);
-	state.setProperty ("TextColor2", button2.findColour (juce::TextButton::textColourOffId).toString(), nullptr);
-	state.setProperty ("TextColor3", button3.findColour (juce::TextButton::textColourOffId).toString(), nullptr);
-	state.setProperty ("TextColor4", button4.findColour (juce::TextButton::textColourOffId).toString(), nullptr);
-	state.setProperty ("TextColor5", button5.findColour (juce::TextButton::textColourOffId).toString(), nullptr);
-	state.setProperty ("TextColor6", button6.findColour (juce::TextButton::textColourOffId).toString(), nullptr);
-	state.setProperty ("TextColor7", button7.findColour (juce::TextButton::textColourOffId).toString(), nullptr);
-	state.setProperty ("TextColor8", button8.findColour (juce::TextButton::textColourOffId).toString(), nullptr);
-	state.setProperty ("button1Data", button1.getComponentID(), nullptr);
-    state.setProperty ("button2Data", button2.getComponentID(), nullptr);
-    state.setProperty ("button3Data", button3.getComponentID(), nullptr);
-    state.setProperty ("button4Data", button4.getComponentID(), nullptr);
-    state.setProperty ("button5Data", button5.getComponentID(), nullptr);
-    state.setProperty ("button6Data", button6.getComponentID(), nullptr);
-    state.setProperty ("button7Data", button7.getComponentID(), nullptr);
-    state.setProperty ("button8Data", button8.getComponentID(), nullptr);
-    state.setProperty ("InNote",    InNoteSlider.getValue(),    nullptr);
-	state.setProperty ("InChannel", InChannelSlider.getValue(), nullptr);
-	state.setProperty ("MidiThru",  MidiThru.getToggleState(),  nullptr);
-	
-    state.setProperty ("ShowRows", ToggleRows.getToggleState(), nullptr);
-    state.setProperty ("ColorRangeToggle", false, nullptr);  // Always save as "Full" (off)
-    state.setProperty ("lastUsedFile", lastUsedFile.getFullPathName(), nullptr);
+    audioProcessor.setAppProperty ("ShowRows", ToggleRows.getToggleState());
+    audioProcessor.setAppProperty ("ColorRangeToggle", false);     // Always save as "Full" (off)
+    audioProcessor.setAppProperty ("lastUsedFile", lastUsedFile.getFullPathName());
 }
 
 void CallAppAudioProcessorEditor::loadStateFromValueTree (const juce::ValueTree& state)
-{  
+{
+    if (! state.isValid()) return;
+    const juce::ScopedValueSetter<bool> applyingState (isApplyingProcessorState, true);
+
     colorRange.setToggleState (false, juce::sendNotificationSync);  // Always reset to default (Full)
     button1.setButtonText (state.getProperty ("button1Text", "...").toString());
     button2.setButtonText (state.getProperty ("button2Text", "...").toString());
@@ -1318,7 +1681,7 @@ void CallAppAudioProcessorEditor::loadStateFromValueTree (const juce::ValueTree&
 	}
 	
 	updateSliderFromButton(); // update slider, if a button is selected
-  	syncTextColorToggle(); // update ToggleButton, if a button is selected
+  	syncTextColorToggle();    // update ToggleButton, if a button is selected
   	updateNoteSliderFromButton();
   	updateChannelSliderFromButton();
     
@@ -1326,19 +1689,10 @@ void CallAppAudioProcessorEditor::loadStateFromValueTree (const juce::ValueTree&
     rowsCount();
     resized();
 
-    // Auto-select last used file if the chooser is open
-    juce::String lastPath = state.getProperty ("lastUsedFile", "").toString();
-    if (fileChooser && !lastPath.isEmpty())
-    {
-        juce::File lastFile (lastPath);
-        if (lastFile.existsAsFile())
-        {
-            fileChooser->setLastUsedFile (lastFile);  // Update file list while open
-        }
-    }
+    refreshFileChooserSelectionFromState (state);  // –> last used file
 }
 
-void TextEditorPopup::mouseEnter (const juce::MouseEvent& e)
+void TextEditorPopup::mouseDown (const juce::MouseEvent& e)
 {
     if (auto* editor = dynamic_cast<juce::TextEditor*> (e.eventComponent))
     {
@@ -1350,12 +1704,19 @@ void TextEditorPopup::mouseEnter (const juce::MouseEvent& e)
 
 void CallAppAudioProcessorEditor::mouseEnter (const juce::MouseEvent& e)
 {
-    if (auto* editor = dynamic_cast<juce::TextEditor*> (e.eventComponent))
-    { colorRange.setToggleState (false, juce::sendNotificationSync); }  // Color range = Full RGB
+    if (auto* editor = dynamic_cast<juce::TextEditor*> (e.eventComponent)) { 
+        colorRange.setToggleState (false, juce::sendNotificationSync);  // Color range = Full RGB
+        
+        ColorSlider.setViewportIgnoreDragFlag (false);     // Allow scrolling temporarily
+		midiNoteSlider.setViewportIgnoreDragFlag (false);
+		ChannelSlider.setViewportIgnoreDragFlag (false);
+		InNoteSlider.setViewportIgnoreDragFlag (false);
+		InChannelSlider.setViewportIgnoreDragFlag (false);
+    }
 }
 
 void CallAppAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
-{
+{    
     if      (e.eventComponent == &Link1) { updateButtonState (&button1, true); NoteOnOff (&button1, true); }
     else if (e.eventComponent == &Link2) { updateButtonState (&button2, true); NoteOnOff (&button2, true); }
     else if (e.eventComponent == &Link3) { updateButtonState (&button3, true); NoteOnOff (&button3, true); }
@@ -1368,6 +1729,12 @@ void CallAppAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
 void CallAppAudioProcessorEditor::mouseUp (const juce::MouseEvent& e)
 {
+    ColorSlider.setViewportIgnoreDragFlag (true);     // Restore default
+	midiNoteSlider.setViewportIgnoreDragFlag (true);
+	ChannelSlider.setViewportIgnoreDragFlag (true);
+	InNoteSlider.setViewportIgnoreDragFlag (true);
+	InChannelSlider.setViewportIgnoreDragFlag (true);
+    
     if      (e.eventComponent == &Link1) { updateButtonState (&button1, false); NoteOnOff (&button1, false); }
     else if (e.eventComponent == &Link2) { updateButtonState (&button2, false); NoteOnOff (&button2, false); }
     else if (e.eventComponent == &Link3) { updateButtonState (&button3, false); NoteOnOff (&button3, false); }
@@ -1376,31 +1743,108 @@ void CallAppAudioProcessorEditor::mouseUp (const juce::MouseEvent& e)
     else if (e.eventComponent == &Link6) { updateButtonState (&button6, false); NoteOnOff (&button6, false); }
     else if (e.eventComponent == &Link7) { updateButtonState (&button7, false); NoteOnOff (&button7, false); }
     else if (e.eventComponent == &Link8) { updateButtonState (&button8, false); NoteOnOff (&button8, false); }
-#if JUCE_IOS
-    if (auto* textEditor = dynamic_cast<juce::TextEditor*> (e.eventComponent))
-    {   
-        int clicks = e.getNumberOfClicks(); 
-        if (clicks > 1) 
+
+    auto* textEditor = dynamic_cast<juce::TextEditor*> (e.originalComponent);
+
+    if (textEditor == nullptr) textEditor = dynamic_cast<juce::TextEditor*> (e.eventComponent);
+    if (textEditor != nullptr)
+    {
+        const bool autoScrollScheduled = lastAutoScrollEditor.getComponent() != textEditor;
+        
+        if (autoScrollScheduled)
         {
-            juce::Timer::callAfterDelay (10, [this, textEditor]
-             { showIOSContextMenu (*textEditor); });
+            lastAutoScrollEditor = textEditor;
+            scrollEditorAboveKeyboard (*textEditor);
+        }
+        const int clicks = e.getNumberOfClicks();
+        // If opening the keyboard also triggers auto-scroll, wait until
+        // the editor has reached its final position before showing the menu.
+        const int menuDelay = autoScrollScheduled ? 320 : (clicks > 1 ? 10 : 0);
+
+        if (menuDelay > 0)
+        {
+            juce::Component::SafePointer<CallAppAudioProcessorEditor> safeThis (this);
+            juce::Component::SafePointer<juce::TextEditor> safeEditor (textEditor);
+
+            juce::Timer::callAfterDelay (menuDelay, [safeThis, safeEditor] {
+                if (safeThis == nullptr || safeEditor == nullptr)
+                    return;
+                safeThis->showIOSContextMenu (*safeEditor);
+            });
         }
         else { showIOSContextMenu (*textEditor); }
+
         textEditor->onTextChange = []() { hideIOSMenuNative(); };
+
+        return;
     }
-#endif
+    // On the first tap, a Slider's internal TextEditor may not exist yet.
+    // Check again shortly after the Slider has entered text-edit mode.
+    auto* label = dynamic_cast<juce::Label*> (e.originalComponent);
+	
+	const bool comesFromSliderTextBox = label != nullptr && (
+		ColorSlider.isParentOf (label)
+		|| midiNoteSlider.isParentOf (label)
+		|| ChannelSlider.isParentOf (label)
+		|| InNoteSlider.isParentOf (label)
+		|| InChannelSlider.isParentOf (label));
+	
+	if (comesFromSliderTextBox)
+    {
+        label->onEditorHide = [] { hideIOSMenuNative(); };
+        
+        juce::Component::SafePointer<CallAppAudioProcessorEditor> safeThis (this);
+
+        juce::Timer::callAfterDelay (20, [safeThis] {
+            if (safeThis == nullptr) return;
+            auto* focusedComponent = juce::Component::getCurrentlyFocusedComponent();
+            auto* focusedEditor = dynamic_cast<juce::TextEditor*> (focusedComponent);
+            if (focusedEditor == nullptr) return;
+
+            const bool belongsToSupportedSlider =
+				safeThis->ColorSlider.isParentOf (focusedEditor)
+				|| safeThis->midiNoteSlider.isParentOf (focusedEditor)
+				|| safeThis->ChannelSlider.isParentOf (focusedEditor)
+				|| safeThis->InNoteSlider.isParentOf (focusedEditor)
+				|| safeThis->InChannelSlider.isParentOf (focusedEditor);
+
+            if (! belongsToSupportedSlider)
+                return;
+            if (safeThis->lastAutoScrollEditor.getComponent() == focusedEditor)
+                return;
+
+            safeThis->lastAutoScrollEditor = focusedEditor;
+            safeThis->scrollEditorAboveKeyboard (*focusedEditor);
+        });
+    }
 }
 
-#if JUCE_IOS
 void TextEditorPopup::mouseUp (const juce::MouseEvent& e)
 {
     if (auto* textEditor = dynamic_cast<juce::TextEditor*> (e.eventComponent))
     {
-        int clicks = e.getNumberOfClicks();
-        if (clicks > 1) 
+        const bool autoScrollScheduled = lastAutoScrollEditor != textEditor;
+
+        if (autoScrollScheduled)
         {
-            juce::Timer::callAfterDelay (10, [this, textEditor]
-             { showIOSContextMenu (*textEditor); });
+            lastAutoScrollEditor = textEditor;
+            scrollEditorAboveKeyboard (*textEditor);
+        }
+        const int clicks = e.getNumberOfClicks();
+        // If opening the keyboard also triggers auto-scroll, wait until
+        // the editor has reached its final position before showing the menu.
+        const int menuDelay = autoScrollScheduled ? 320 : (clicks > 1 ? 10 : 0);
+
+        if (menuDelay > 0)
+        {
+            juce::Component::SafePointer<TextEditorPopup> safeThis (this);
+            juce::Component::SafePointer<juce::TextEditor> safeEditor (textEditor);
+
+            juce::Timer::callAfterDelay (menuDelay, [safeThis, safeEditor] {
+                if (safeThis == nullptr || safeEditor == nullptr)
+                    return;
+                safeThis->showIOSContextMenu (*safeEditor);
+            });
         }
         else { showIOSContextMenu (*textEditor); }
     }
@@ -1435,5 +1879,3 @@ void CallAppAudioProcessorEditor::showIOSContextMenu (juce::TextEditor& editor)
     }
     lastCursorPosition = currentCursorPosition; // Updates the stored position
 }
-#endif
-

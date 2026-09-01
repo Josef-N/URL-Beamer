@@ -51,11 +51,10 @@ public:
         fileNameEditor.setJustification (juce::Justification::centred);
         fileNameEditor.setFont (juce::Font (juce::FontOptions().withPointHeight(18.0f)));
         fileNameEditor.onReturnKey = [this]() { handleFileNameInput(); };
-        addAndMakeVisible (fileNameEditor);
-#if JUCE_IOS
-		fileNameEditor.addMouseListener (this, false); // Register mouseUp as MouseListener
+		fileNameEditor.addMouseListener (this, false);  // Register mouseUp as MouseListener
 		fileNameEditor.onTextChange = [] { hideIOSMenuNative(); };
-#endif
+		addAndMakeVisible (fileNameEditor);
+
         Save.setButtonText ("Save");
         Save.setColour (juce::TextButton::buttonColourId, juce::Colour (0xFFA100C4));
         Save.onClick = [this]() { handleFileNameInput(); };  // Call for save
@@ -106,74 +105,127 @@ public:
         g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
     }
     
-    void resized() override
-    {
-		auto top = 8;   // Default for Plugin
+	void resized() override
+	{
+		const bool isStandalone = juce::JUCEApplicationBase::isStandaloneApp();
+		const bool portrait = getHeight() > getWidth();
+	
+		auto titleTop = 8;   // Default for Plugin
 		auto border = 8;
-		auto bottom = top + 142;     // fileList, Default for Standalone
+		auto bottomMargin = 8;
+	
+		constexpr int titleHeight = 22;
+		constexpr int spacing = 2;
+		constexpr int buttonHeight = 40;
+		constexpr int rightButtonWidth = 60;
+		constexpr int extraBottomPadding = 14;
+	
+		const auto* display = juce::Desktop::getInstance().getDisplays()
+								  .getDisplayForRect (getScreenBounds());
+		// Standalone:
+		if (isStandalone) {
+			if (display != nullptr) {
+				const auto safeInsets = display->safeAreaInsets;
+				bottomMargin = safeInsets.getBottom() + extraBottomPadding;
+				// iPad
+				if (isRunningOnIPad()) {
+					// Align selectDirectory with button1 in the main editor.
+					const auto protectedTop = juce::jmax (76, safeInsets.getTop());
+					const auto selectDirectoryTop = protectedTop + 6;
+					titleTop = selectDirectoryTop - titleHeight;
+					border = portrait ? 8 : 64;  // Portrait : Landscape
+				// iPhone
+				} else if (portrait) {    // Portrait
+					// Align titleLabel with button1 in the main editor.
+					titleTop = safeInsets.getTop() + 8;
+					border = 8;
+				} else {                  // Landscape
+					// Keep the existing top position in iPhone landscape.
+					const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+					titleTop = 8;
+					border = horizontalSafeInset + 8;
+			}	}
+			else {		// Fallback: Use fixed safe margins if no display information is available.
+				juce::Logger::writeToLog ("CustomFileChooser: no display found for screen bounds");
+				if (isRunningOnIPad()) {        // iPad
+					titleTop = 60;
+					border = portrait ? 8 : 64;
+					bottomMargin = 28;
+				} else if (portrait) {          // iPhone / portrait
+					titleTop = 64;
+					border = 8;
+					bottomMargin = 42;
+				} else {                        // iPhone / landscape
+					titleTop = 8;
+					border = 64;
+					bottomMargin = 28;
+		}	}	}
+		// Plugin:
+		else if (! isRunningOnIPad() && ! portrait) {    // iPhone – landscape
+			if (display != nullptr) {
+				const auto safeInsets = display->safeAreaInsets;
+				const auto pluginBounds = getScreenBounds();
+				const auto displayBounds = display->logicalBounds;
+	
+				constexpr int edgeTolerance = 2;
+	
+				const bool usesFullDisplayWidth =
+					   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
+					&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
+	
+				if (usesFullDisplayWidth) {     // Plugin with Full Display Width, e.g. GarageBand
+					const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+					border = horizontalSafeInset + 8;
+				}
+				else if (getWidth() > 560) {    // if NOT Full Display Width
+					border = 64;
+			}	}
+			else if (getWidth() > 560) {    // Fallback, if display == nullptr
+				border = 64;
+		}	}
+		else if (isRunningOnIPad() && getWidth() > 560) {    // iPad – wide plugin layout
+			border = 64;
+		}   // Otherwise: defaults for plugin (top, border = 8), iPhone – portrait & iPad
+	
+		const auto contentWidth = getWidth() - 2 * border;
+		const auto bottomButtonsWidth = (contentWidth - 3 * spacing) / 4;
+        
+		titleLabel.setBounds (border, titleTop, contentWidth, titleHeight);
+	
+		const auto upperRowY = titleLabel.getBottom();
+		selectDirectory.setBounds                                (border, upperRowY, bottomButtonsWidth, buttonHeight);
+		Cancel.setBounds           (getWidth() - border - rightButtonWidth, upperRowY, rightButtonWidth, buttonHeight);
+		Save.setBounds         (Cancel.getX() - spacing - rightButtonWidth, upperRowY, rightButtonWidth, buttonHeight);
+		CancelDelete.setBounds     (getWidth() - border - rightButtonWidth, upperRowY, rightButtonWidth, buttonHeight);
+		Delete.setBounds (CancelDelete.getX() - spacing - rightButtonWidth, upperRowY, rightButtonWidth, buttonHeight);
+	
+		if (isStandalone) {     // Standalone
+			const auto editorX = border + bottomButtonsWidth + spacing;
+			if (isSaveMode || DeleteMode) {
+				fileNameEditor.setBounds (editorX, upperRowY, 
+					contentWidth - bottomButtonsWidth - spacing - 2 * rightButtonWidth - 2 * spacing, buttonHeight);
+			} else {
+				fileNameEditor.setBounds (
+					editorX, upperRowY, contentWidth - bottomButtonsWidth - spacing, buttonHeight);
+			} 
+		} else {                // Plugin
+			if (isSaveMode || DeleteMode) {
+				fileNameEditor.setBounds (
+					border, upperRowY, contentWidth - 2 * rightButtonWidth - spacing, buttonHeight);
+			} else {
+				fileNameEditor.setBounds (border, upperRowY, contentWidth, buttonHeight);
+		}   }
+		const auto bottomButtonsY = getHeight() - bottomMargin - buttonHeight;
 		
-		#if JUCE_IOS
-		if (juce::JUCEApplicationBase::isStandaloneApp()) {  // if Standalone:
-		    const bool portrait = (getHeight() > getWidth());
-	                  // iPad
-		    if (isRunningOnIPad()) {
-			    top = 60;
-			    border = portrait ? 8 : 64;  // Portrait : Landscape
-	            bottom = top + 142;
-	        } else {  // iPhone
-	            if (portrait) {  // Portrait
-	                top = 64;         // Notch: 44 points, Dynamic Island: 48 points
-	                border = 8;
-				    bottom = top + 152;
-				} else {
-				    top = 8;     // Landscape
-				    border = 64;
-				    bottom = top + 142;
-	            }
-		    }
-		} else {  // if Plugin:
-		    bottom = top + 116;
-		    if (getWidth() > 560) {   // Save for GarageBand + iPhone SE 4' (w = 568 pt)
-		        top = 8;
-		        border = 64;
-		    }
-	    }
-	    #else  // (#elif) JUCE_MAC
-	    top = 8;
-	    if (getWidth() > 560) { border = 54; }
-	    #endif
-	    
-		int spacing = 2;
-        int buttonHeight = 40;
-        int rButtonWith = 60;
-        int reducedWith = (getWidth() - 2 * border);
-        int buttonWith = (reducedWith - 4) / 4;
-        
-        titleLabel     .setBounds (border, top, getWidth() - border, 22);
-        selectDirectory.setBounds (border, titleLabel.getBottom(), buttonWith, buttonHeight);
-        Cancel.setBounds      (getWidth() - border - rButtonWith, titleLabel.getBottom(), rButtonWith, buttonHeight);
-        Save.setBounds    (Cancel.getX() - spacing - rButtonWith, titleLabel.getBottom(), rButtonWith, buttonHeight);
-        CancelDelete.setBounds(getWidth() - border - rButtonWith, titleLabel.getBottom(), rButtonWith, buttonHeight);
-        Delete.setBounds  (Cancel.getX() - spacing - rButtonWith, titleLabel.getBottom(), rButtonWith, buttonHeight);
-        
-        if (juce::JUCEApplicationBase::isStandaloneApp()) {
-            if (isSaveMode == true || DeleteMode == true)
-				 { fileNameEditor.setBounds (border + buttonWith + spacing, titleLabel.getBottom(), 
-                                             reducedWith - buttonWith - 126, buttonHeight); }
-			else { fileNameEditor.setBounds (border + buttonWith + spacing, titleLabel.getBottom(), 
-			                                 reducedWith - buttonWith - 2, buttonHeight); }
-        } else {
-			if (isSaveMode == true || DeleteMode == true)
-				 { fileNameEditor.setBounds (border, titleLabel.getBottom(), reducedWith - 124, buttonHeight); }
-			else { fileNameEditor.setBounds (border, titleLabel.getBottom(), reducedWith,       buttonHeight); }
-        }
-        fileList.setBounds (border, fileNameEditor.getBottom() + spacing, reducedWith, getHeight() - bottom);
-        
-        saveButton  .setBounds (border,               fileList.getBottom() + spacing, buttonWith, buttonHeight);
-        loadButton  .setBounds (saveButton.getRight()   + spacing, saveButton.getY(), buttonWith, buttonHeight);
-        deleteButton.setBounds (loadButton.getRight()   + spacing, saveButton.getY(), buttonWith, buttonHeight);
-        doneButton  .setBounds (deleteButton.getRight() + spacing, saveButton.getY(), buttonWith, buttonHeight);
-    }
+		saveButton  .setBounds (border,                            bottomButtonsY, bottomButtonsWidth, buttonHeight);
+		loadButton  .setBounds (saveButton.getRight()   + spacing, bottomButtonsY, bottomButtonsWidth, buttonHeight);
+		deleteButton.setBounds (loadButton.getRight()   + spacing, bottomButtonsY, bottomButtonsWidth, buttonHeight);
+		doneButton  .setBounds (deleteButton.getRight() + spacing, bottomButtonsY, bottomButtonsWidth, buttonHeight);
+	
+		const auto fileListTop = fileNameEditor.getBottom() + spacing;
+		const auto fileListBottom = bottomButtonsY - spacing;
+		fileList.setBounds (border, fileListTop, contentWidth, juce::jmax (0, fileListBottom - fileListTop));
+	}
     
     // callback functions
     std::function<void (juce::File)> onFileSelected;
@@ -182,11 +234,6 @@ public:
     // Expose a method to query the current mode
     bool isInSaveMode() const { return isSaveMode; }
     
-    //============================================================================== 
-    // for iOS standalone
-    void setToggleState (bool newState) {
-        selectDirectory.setToggleState (newState, juce::dontSendNotification);
-    }
     //==============================================================================
     // Set the last used file (to be called from the editor)
     void setLastUsedFile (const juce::File& file)
@@ -386,7 +433,7 @@ private:
         fileNameEditor.setText (removeExtension (selectedFile.getFileName())); // remove ".xml"
     }
     
-#if JUCE_IOS
+    // IOSContextMenu
 	int lastCursorPosition = -1;
 	
 	void mouseUp (const juce::MouseEvent& e) override
@@ -417,6 +464,6 @@ private:
 		}
 		lastCursorPosition = currentCursorPosition; // Updates the stored position
 	}
-#endif
+	
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CustomFileChooser)
 };
