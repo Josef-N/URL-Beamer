@@ -77,19 +77,22 @@
  #define JucePlugin_EditorRequiresKeyboardFocus  0
 #endif
 #ifndef  JucePlugin_Version
- #define JucePlugin_Version                1.0.3
+ #define JucePlugin_Version                1.0.4
 #endif
 #ifndef  JucePlugin_VersionCode
- #define JucePlugin_VersionCode            0x10003
+ #define JucePlugin_VersionCode            0x10004
 #endif
 #ifndef  JucePlugin_VersionString
- #define JucePlugin_VersionString          "1.0.3"
+ #define JucePlugin_VersionString          "1.0.4"
 #endif
 #ifndef  JucePlugin_VSTUniqueID
  #define JucePlugin_VSTUniqueID            JucePlugin_PluginCode
 #endif
 #ifndef  JucePlugin_VSTCategory
  #define JucePlugin_VSTCategory            kPlugCategSynth
+#endif
+#ifndef  JucePlugin_LV2PluginClass
+ #define JucePlugin_LV2PluginClass         InstrumentPlugin
 #endif
 #ifndef  JucePlugin_Vst3Category
  #define JucePlugin_Vst3Category           "Instrument|Synth"
@@ -155,7 +158,7 @@
  #define JucePlugin_ARAFactoryID           "com.JosefNovotny.URLBeamer.factory"
 #endif
 #ifndef  JucePlugin_ARADocumentArchiveID
- #define JucePlugin_ARADocumentArchiveID   "com.JosefNovotny.URLBeamer.aradocumentarchive.1.0.3"
+ #define JucePlugin_ARADocumentArchiveID   "com.JosefNovotny.URLBeamer.aradocumentarchive.1.0.4"
 #endif
 #ifndef  JucePlugin_ARACompatibleArchiveIDs
  #define JucePlugin_ARACompatibleArchiveIDs  ""
