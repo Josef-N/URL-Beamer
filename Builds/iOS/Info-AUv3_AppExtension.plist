@@ -33,7 +33,7 @@
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.3</string>
+    <string>1.0.4</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSHumanReadableCopyright</key>
@@ -50,6 +50,8 @@
       <string>com.apple.AudioUnit-UI</string>
       <key>NSExtensionAttributes</key>
       <dict>
+        <key>AudioComponentBundle</key>
+        <string></string>
         <key>AudioComponents</key>
         <array>
           <dict>
@@ -66,7 +68,7 @@
             <key>subtype</key>
             <string>Beam</string>
             <key>version</key>
-            <integer>65539</integer>
+            <integer>65540</integer>
             <key>sandboxSafe</key>
             <true/>
             <key>tags</key>
