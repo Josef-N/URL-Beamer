@@ -138,27 +138,6 @@ int getIOSKeyboardOverlap (juce::Component& component, int clearance)
             const auto componentBottom = static_cast<float> (componentBounds.getBottom());
             auto keyboardTop = static_cast<float> (CGRectGetMinY (keyboardFrame));
 
-            if (! juce::JUCEApplicationBase::isStandaloneApp()  // iPhone – Plugin
-                && ! isRunningOnIPad() && view.window != nil)
-            {
-                const auto screenBounds = view.window.screen.bounds;
-                const auto windowFrame = view.window.frame;
-                const auto screenWidth = CGRectGetWidth (screenBounds);
-                const auto windowWidth = CGRectGetWidth (windowFrame);
-                constexpr CGFloat edgeTolerance = 2.0;
-                const bool usesFullDisplayWidth = std::abs (screenWidth - windowWidth) <= edgeTolerance;
-
-                if (usesFullDisplayWidth) {          // Plugin with Full Display Width, e.g. GarageBand
-                    const auto bottomOutsideWindow = juce::jmax (0.0, static_cast<double> (
-								CGRectGetMaxY (screenBounds) - CGRectGetMaxY (windowFrame)));
-					// Only compensate when the area below the plugin window
-					// is smaller than the keyboard area inside the window.
-					if (bottomOutsideWindow > 0.0 && bottomOutsideWindow < static_cast<double> (keyboardHeight))
-					{
-						keyboardTop -= static_cast<float> (bottomOutsideWindow);
-					}
-                }
-            }
             const auto overlap = componentBottom + static_cast<float> (clearance) - keyboardTop;
             return overlap > 0.0f ? juce::roundToInt (overlap) : 0;
         }
@@ -319,8 +298,7 @@ void showIOSMenuNative (juce::Component& component)
 			
 			if (auto* textEditor = dynamic_cast<juce::TextEditor*> (&component))
 			{
-				const auto editorBounds =
-					peer->getAreaCoveredBy (*textEditor);
+				const auto editorBounds = peer->getAreaCoveredBy (*textEditor);
 			
 				targetRect = CGRectMake (
 					static_cast<CGFloat> (editorBounds.getX()),

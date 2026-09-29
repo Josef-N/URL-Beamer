@@ -6,10 +6,10 @@
 //==============================================================================
 namespace // Anonymous namespace; visible only in this .cpp file
 {
-    const juce::Identifier appStateType       { "PARAMETERS" };
-    const juce::Identifier inputNoteProperty  { "InNote" };
+    const juce::Identifier appStateType         { "PARAMETERS" };
+    const juce::Identifier inputNoteProperty    { "InNote" };
     const juce::Identifier inputChannelProperty { "InChannel" };
-    const juce::Identifier midiThruProperty   { "MidiThru" };
+    const juce::Identifier midiThruProperty     { "MidiThru" };
 }
 
 //==============================================================================
@@ -22,10 +22,12 @@ CallAppAudioProcessor::CallAppAudioProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
-                       ),
+                     ),
+#else
+    :
+#endif
       treeState  (*this, nullptr, "PARAMETER", createParameterLayout()),
       parameters (*this, nullptr, appStateType, {})
-#endif
 {
     // The processor owns all persistent default state.
     parameters.state.setProperty ("button1Text", "Midi Designer", nullptr);

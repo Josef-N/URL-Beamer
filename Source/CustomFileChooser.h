@@ -15,6 +15,7 @@ public:
         : directory (initialDirectory), pattern (filePattern)
     {  
         setOpaque (true);
+        setWantsKeyboardFocus (true);
         
         if (juce::JUCEApplicationBase::isStandaloneApp()) {
             titleLabel.setText ("Select Directory: Plugin (Shared) / Documents (Standalone only)", juce::dontSendNotification);
@@ -50,7 +51,8 @@ public:
         fileNameEditor.setReturnKeyStartsNewLine (false);
         fileNameEditor.setJustification (juce::Justification::centred);
         fileNameEditor.setFont (juce::Font (juce::FontOptions().withPointHeight(18.0f)));
-        fileNameEditor.onReturnKey = [this]() { handleFileNameInput(); };
+        fileNameEditor.onReturnKey = [this] { fileNameEditor.giveAwayKeyboardFocus(); };
+		fileNameEditor.onFocusLost = [] { hideIOSMenuNative(); };
 		fileNameEditor.addMouseListener (this, false);  // Register mouseUp as MouseListener
 		fileNameEditor.onTextChange = [] { hideIOSMenuNative(); };
 		addAndMakeVisible (fileNameEditor);
@@ -160,30 +162,43 @@ public:
 					border = 64;
 					bottomMargin = 28;
 		}	}	}
-		// Plugin:
-		else if (! isRunningOnIPad() && ! portrait) {    // iPhone – landscape
-			if (display != nullptr) {
-				const auto safeInsets = display->safeAreaInsets;
-				const auto pluginBounds = getScreenBounds();
-				const auto displayBounds = display->logicalBounds;
-	
-				constexpr int edgeTolerance = 2;
-	
-				const bool usesFullDisplayWidth =
-					   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
-					&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
-	
-				if (usesFullDisplayWidth) {     // Plugin with Full Display Width, e.g. GarageBand
-					const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
-					border = horizontalSafeInset + 8;
+		// Plugin – iPhone:
+		else if (! isRunningOnIPad()) {
+			// Reapply layout after iOS has updated the safe-area insets.
+			if (getWidth() > 0 && getHeight() > 0) {
+				if (! orientationInitialised) {
+					lastPortrait = portrait;
+					orientationInitialised = true;
 				}
-				else if (getWidth() > 560) {    // if NOT Full Display Width
-					border = 64;
+				else if (portrait != lastPortrait) {
+					lastPortrait = portrait;
+					juce::Timer::callAfterDelay (100, 
+						[safe = juce::Component::SafePointer<CustomFileChooser> (this)] {
+							if (safe != nullptr) safe->resized(); });
 			}	}
-			else if (getWidth() > 560) {    // Fallback, if display == nullptr
-				border = 64;
-		}	}
-		else if (isRunningOnIPad() && getWidth() > 560) {    // iPad – wide plugin layout
+			// iPhone / landscape
+			if (! portrait) {
+				if (display != nullptr) {
+					const auto safeInsets = display->safeAreaInsets;
+					const auto pluginBounds = getScreenBounds();
+					const auto displayBounds = display->logicalBounds;
+					constexpr int edgeTolerance = 2;
+		
+					const bool usesFullDisplayWidth =
+						   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
+						&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
+		
+					if (usesFullDisplayWidth) {       // Plugin in GarageBand or Audiobus ...
+						const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+						border = horizontalSafeInset + 8;
+					}
+					else if (getWidth() > 560) {      // Wide plugin, but not full display width.
+						border = 64;
+				}	}
+				else if (getWidth() > 560) {          // Fallback if display information is unavailable.
+					border = 64;
+		}	}	}
+		else if (getWidth() > 560) {
 			border = 64;
 		}   // Otherwise: defaults for plugin (top, border = 8), iPhone – portrait & iPad
 	
@@ -266,6 +281,9 @@ private:
     juce::Array<juce::File> files;
     
     // Helper methods
+    bool lastPortrait = true;
+	bool orientationInitialised = false;
+	
     bool isSaveMode = false; // Tracks current mode dynamically
     bool DeleteMode = false;
     

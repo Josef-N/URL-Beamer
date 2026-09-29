@@ -60,6 +60,9 @@ private:
     juce::TextEditor* lastAutoScrollEditor = nullptr;
     bool keyboardReserveCheckScheduled = false;
     
+    bool lastPortrait = true;
+	bool orientationInitialised = false;
+    
     int baseContentHeight = 0;
     int keyboardScrollReserve = 0;
     double lastScrollY = 0.0;
@@ -123,6 +126,7 @@ public:
     void ColorButtonClicked()
     {
         ColorSlider.setVisible (true);
+        ColorText.setVisible (true);
         ColorLabel.setVisible (true);
         TextColor.setVisible (true);
         DummyLabel.setVisible (true);
@@ -130,13 +134,17 @@ public:
         RangeLabel.setVisible (true);
 
         midiNoteSlider.setVisible (false);
+        midiNoteText.setVisible (false);
         midiNoteLabel.setVisible (false);
         ChannelSlider.setVisible (false);
+        ChannelText.setVisible (false);
         ChannelLabel.setVisible (false);
         OffsetLabel.setVisible (false);
         InNoteSlider.setVisible (false);
+        InNoteText.setVisible (false);
         InChannelLabel.setVisible (false);
         InChannelSlider.setVisible (false);
+        InChannelText.setVisible (false);
         InInfoLabel.setVisible (false);
         MidiSendLabel.setVisible (false);
         MidiThru.setVisible (false);
@@ -156,6 +164,7 @@ public:
     void NoteButtonClicked()
     {
         ColorSlider.setVisible (false);
+        ColorText.setVisible (false);
         ColorLabel.setVisible (false);
         TextColor.setVisible (false);
         DummyLabel.setVisible (false);
@@ -163,13 +172,17 @@ public:
         RangeLabel.setVisible (false);
 
         midiNoteSlider.setVisible (true);
+        midiNoteText.setVisible (true);
         midiNoteLabel.setVisible (true);
         ChannelSlider.setVisible (true);
+        ChannelText.setVisible (true);
         ChannelLabel.setVisible (true);
         OffsetLabel.setVisible (true);
         InNoteSlider.setVisible (true);
+        InNoteText.setVisible (true);
         InChannelLabel.setVisible (true);
         InChannelSlider.setVisible (true);
+        InChannelText.setVisible (true);
         InInfoLabel.setVisible (true);
         MidiSendLabel.setVisible (true);
         MidiThru.setVisible (true);
@@ -190,6 +203,7 @@ public:
     void exitColorButtonClicked()
     {
         ColorSlider.setVisible (false);
+        ColorText.setVisible (false);
         ColorLabel.setVisible (false);
         TextColor.setVisible (false);
         DummyLabel.setVisible (false);
@@ -207,13 +221,17 @@ public:
     void exitMidiButtonClicked()
     {
         midiNoteSlider.setVisible (false);
+        midiNoteText.setVisible (false);
         midiNoteLabel.setVisible (false);
         ChannelSlider.setVisible (false);
+        ChannelText.setVisible (false);
         ChannelLabel.setVisible (false);
         OffsetLabel.setVisible (false);
         InNoteSlider.setVisible (false);
+        InNoteText.setVisible (false);
         InChannelLabel.setVisible (false);
         InChannelSlider.setVisible (false);
+        InChannelText.setVisible (false);
         InInfoLabel.setVisible (false);
         MidiSendLabel.setVisible (false);
         MidiThru.setVisible (false);
@@ -227,7 +245,6 @@ public:
     }
 
     //==============================================================================
-    void mouseEnter (const juce::MouseEvent& e) override;
     void mouseDown (const juce::MouseEvent& event) override;
     void mouseUp (const juce::MouseEvent& event) override;
 
@@ -255,6 +272,8 @@ private:
                      Edit, ToggleRows, menu, Info, exitColor, exitMidi, colorRange, MidiThru;
 
     juce::Slider ColorSlider, midiNoteSlider, ChannelSlider, InNoteSlider, InChannelSlider;
+    juce::TextEditor ColorText, midiNoteText, ChannelText, InNoteText, InChannelText;
+    
     juce::Label messageLabel, ColorLabel, DummyLabel, midiNoteLabel, ChannelLabel, OffsetLabel,
                 InInfoLabel, InChannelLabel, RangeLabel, lockedLabel, editLabel, MidiSendLabel, MidiThruLabel;
     juce::ToggleButton TextColor;
@@ -317,6 +336,9 @@ private:
 
     juce::Component::SafePointer<juce::TextEditor> lastAutoScrollEditor;
 	bool keyboardReserveCheckScheduled = false;
+	
+	bool lastPortrait = true;
+	bool orientationInitialised = false;
 	
 	int baseContentHeight = 0;
 	int keyboardScrollReserve = 0;

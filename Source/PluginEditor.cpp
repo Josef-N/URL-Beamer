@@ -148,7 +148,7 @@ void TextEditorPopup::paint (juce::Graphics& g)
 }
 
 void TextEditorPopup::resized()
-{
+{	
     lastScrollY = scrollView.getViewPositionY(); // Capture current scroll position
 
     auto top = 8;   // Default content padding for the plugin
@@ -202,37 +202,52 @@ void TextEditorPopup::resized()
 				top = 30;
 				border = 64;
 	}	}	}
-    // Plugin:
-	else if (! isRunningOnIPad() && ! portrait) {    // iPhone – landscape
-		if (display != nullptr) {
-			const auto safeInsets = display->safeAreaInsets;
-			const auto pluginBounds = getScreenBounds();
-			const auto displayBounds = display->logicalBounds;
-			
-			constexpr int edgeTolerance = 2;
-			
-			const bool usesFullDisplayWidth =
-				   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
-				&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
-	
-			if (usesFullDisplayWidth) {     // Plugin with Full Display Width, e.g. GarageBand
-				const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
-				top = 8;
-				border = horizontalSafeInset + 8;
+	// Plugin – iPhone:
+	else if (! isRunningOnIPad()) {
+		// Reapply the layout shortly after an orientation change,
+		// because iOS may update the safe-area insets slightly later.
+		if (getWidth() > 0 && getHeight() > 0) {
+			if (! orientationInitialised) {
+				lastPortrait = portrait;
+				orientationInitialised = true;
 			}
-			else if (getWidth() > 560) {    // if NOT Full Display Width
+			else if (portrait != lastPortrait) {
+				lastPortrait = portrait;
+				juce::Timer::callAfterDelay (100, [safe = juce::Component::SafePointer<TextEditorPopup> (this)] {
+						if (safe != nullptr) safe->resized(); });
+		}	}
+		// iPhone / landscape
+		if (! portrait) {
+			if (display != nullptr) {
+				const auto safeInsets = display->safeAreaInsets;
+				const auto pluginBounds = getScreenBounds();
+				const auto displayBounds = display->logicalBounds;
+				constexpr int edgeTolerance = 2;
+	
+				const bool usesFullDisplayWidth =
+					   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
+					&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
+	
+				if (usesFullDisplayWidth) {
+					// Plugin spans the full display width, e.g. GarageBand or Audiobus.
+					const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+					top = 8;
+					border = horizontalSafeInset + 8;
+				}
+				else if (getWidth() > 560) {     // Wide plugin, but not full display width.
+					top = 8;
+					border = 64;
+		    }	}
+			else if (getWidth() > 560) {         // Fallback if display information is unavailable.
 				top = 8;
 				border = 64;
-		}	}
-		else if (getWidth() > 560) {    // Fallback, if display == nullptr
-			top = 8;
-			border = 64;
-	}	}
-	else if (isRunningOnIPad() && getWidth() > 560) {    // iPad – wide plugin layout
+	}	}	}
+	// Plugin – iPad:
+	else if (getWidth() > 560) {    // Wide plugin layout
 		top = 8;
 		border = 64;
 	}   // Otherwise: defaults for plugin (top, border = 8), iPhone – portrait & iPad
-    
+
     auto viewportBounds = getLocalBounds();
     // IMPORTANT: apply pinned top inset to the viewport so it doesn't scroll away
     viewportBounds.removeFromTop (pinnedTopInset);
@@ -368,16 +383,17 @@ void TextEditorPopup::scheduleKeyboardReserveCheck()
         if (safeThis->keyboardScrollReserve == 0)
             return;
         if (getIOSKeyboardOverlap (safeThis->scrollView, 0) == 0)
-        {
-            safeThis->keyboardScrollReserve = 0;
-            // The keyboard may have been dismissed without a focus change.
-            safeThis->lastAutoScrollEditor = nullptr;
-            safeThis->resized();
-            // Keep the stored position in sync if the viewport was clamped
-            // after removing the temporary content reserve.
-            safeThis->lastScrollY = safeThis->scrollView.getViewPositionY();
-            return;
-        }
+		{
+			// The keyboard may have been dismissed without a focus change.
+//			hideIOSMenuNative();                                              // maybe not in TextEditorPopup ???
+			safeThis->keyboardScrollReserve = 0;
+			safeThis->lastAutoScrollEditor = nullptr;
+			safeThis->resized();
+			// Keep the stored position in sync if the viewport was clamped
+			// after removing the temporary content reserve.
+			safeThis->lastScrollY = safeThis->scrollView.getViewPositionY();
+			return;
+		}
         safeThis->scheduleKeyboardReserveCheck();
     });
 }
@@ -398,10 +414,12 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     setSize (500, 360);
     setResizable (true, false);
     setOpaque (true);
+    setWantsKeyboardFocus (true);
     
     addAndMakeVisible (scrollView);
     scrollView.setViewedComponent (&scrollContent, false); // false = don't delete
     scrollView.setScrollBarsShown (false, true);           // Only vertical scroll
+    scrollContent.setWantsKeyboardFocus (true);
     
     auto setupButton = [this](juce::TextButton& button, int index) {
 		button.onClick = [this, &button, index]() {
@@ -466,22 +484,44 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
                                                     CallAppAudioProcessorEditor::repaint(); };
     // Repaint Editor because: if opening another app via hyperlink and coming back, also other buttons are dirty
     
+    auto setupSliderTextEditor = [this](juce::TextEditor& editor, std::function<void()> commitText)
+	{
+		editor.setVisible (false);
+		editor.setText ("0", false); // sendTextChangeMessage = false
+		editor.setMultiLine (false);
+		editor.setJustification (juce::Justification::centred);
+		editor.setSelectAllWhenFocused (true);
+		editor.addMouseListener (this, false);
+		editor.onTextChange = [] { hideIOSMenuNative(); };
+		editor.onReturnKey = [&editor] { editor.giveAwayKeyboardFocus(); };
+        editor.onFocusLost = [&editor, commitText, this] {
+			hideIOSMenuNative();
+			if (commitText) commitText();
+			editor.setCaretPosition (0);
+			if (lastAutoScrollEditor.getComponent() == &editor)
+				lastAutoScrollEditor = nullptr;
+		};
+	};
+    
     scrollContent.addAndMakeVisible (ColorSlider);
     ColorSlider.setViewportIgnoreDragFlag (true);
-    ColorSlider.setVisible (false);            // (MouseListener = for iOS)
-    ColorSlider.addMouseListener (this, true); // true: Listen to any child component within this component
-    ColorSlider.setRange (0, 0xFFFFFF, 1);     // RGB range
-    ColorSlider.setTextBoxStyle (juce::Slider::TextBoxAbove, false, 80, 22);
+    ColorSlider.setVisible (false);
+    ColorSlider.setRange (0, 0xFFFFFF, 1);     // RGB range    
+    ColorSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 80, 22);  // 80, 22: no meaning
     ColorSlider.onValueChange = [this] { updateButtonColorFromSlider(); };
-    ColorSlider.textFromValueFunction = [](double value) { return ""; }; // No disply for 1st Nr
-    ColorSlider.valueFromTextFunction = [this](const juce::String& text) 
-    { return static_cast<double>(text.getHexValue32() & 0xFFFFFF); };
-    
+
+    scrollContent.addAndMakeVisible (ColorText);
+	setupSliderTextEditor (ColorText, [this] {
+		const auto colorValue = static_cast<double> (ColorText.getText().trim().getHexValue32() & 0xFFFFFF);
+		ColorSlider.setValue (colorValue, juce::sendNotificationSync); });
+    ColorText.setInputRestrictions (6, "0123456789ABCDEFabcdef");
+    ColorText.setText (juce::CharPointer_UTF8 ("\xe2\x80\x94 \xe2\x80\x94"), false); // sendTextChangeMessage = false
+	                                                              // "— —"
     scrollContent.addAndMakeVisible (ColorLabel);
     ColorLabel.setVisible (false);
     ColorLabel.setText ("Select button for color change", juce::dontSendNotification);
     ColorLabel.setJustificationType (juce::Justification::left);
-    
+
     scrollContent.addAndMakeVisible (TextColor);
     TextColor.setVisible (false);
     TextColor.setButtonText ("Text color b/w");
@@ -490,7 +530,7 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     
     scrollContent.addAndMakeVisible (DummyLabel);
     DummyLabel.setVisible (false);
-    
+
     scrollContent.addAndMakeVisible (colorRange);
     colorRange.setVisible (false);
     colorRange.setButtonText ("Full");  // Default state
@@ -505,33 +545,40 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     
     scrollContent.addAndMakeVisible (midiNoteSlider);
     midiNoteSlider.setViewportIgnoreDragFlag (true);
-    midiNoteSlider.setVisible (false);            // (MouseListener = for iOS)
-    midiNoteSlider.addMouseListener (this, true); // true: Listen to any child component within this component
+    midiNoteSlider.setVisible (false);
     midiNoteSlider.setRange (0, 127, 1);
-    midiNoteSlider.setTextBoxStyle (juce::Slider::TextBoxAbove, false, 80, 22);
+    midiNoteSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 80, 22);
     midiNoteSlider.onValueChange = [this] { updateNoteNumberFromSlider(); };
-    midiNoteSlider.textFromValueFunction = [](double value) -> juce::String {
+
+    scrollContent.addAndMakeVisible (midiNoteText);
+	setupSliderTextEditor (midiNoteText, [this] {
 		static const juce::StringArray noteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-		int midiNote = static_cast<int> (value);
-		int octave = (midiNote / 12) - 1;  // MIDI note 60 = C4
-		juce::String noteName = noteNames[midiNote % 12] + juce::String (octave);
-		return noteName + " (" + juce::String (midiNote) + ")";  // Example: "C4 (60)"
-	};
-	midiNoteSlider.valueFromTextFunction = [](const juce::String& text) -> double {
-		static const juce::StringArray noteNames = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-		juce::String input = text.trim().toUpperCase();
-		for (int i = 0; i < 128; ++i) {               // Check if input is a valid note name
-			int octave = (i / 12) - 1;
-			juce::String expectedNote = noteNames[i % 12] + juce::String (octave);
-			if (input == expectedNote) { return static_cast<double>(i); }
-		}
-		if (input.containsOnly ("0123456789")) {      // If input is purely a number
-			int midiNumber = input.getIntValue();
-			if (midiNumber >= 0 && midiNumber <= 127) { return static_cast<double> (midiNumber); }
-		}
-		return 60.0; // Default to C4 if input is invalid
-	};
-	
+		const auto input = midiNoteText.getText().trim().toUpperCase();
+		int midiNote = 60;  // Default to C4 if input is invalid
+		bool validInput = false;
+		for (int i = 0; i < 128; ++i) {            // Note name, e.g. C4 or F#3
+			const auto expectedNote = juce::MidiMessage::getMidiNoteName (i, true, true, 4);
+			if (input == expectedNote) {
+				midiNote = i;               // (true, true, 4): useSharps, includeOctaveNumber, MiddleC=64
+				validInput = true;
+				break;
+		}	}                                      // MIDI number, e.g. 60
+		if (! validInput && input.containsOnly ("0123456789")) {
+			midiNote = juce::jmin (input.getIntValue(), 127);
+			validInput = true;
+		}                                   // Current display format, e.g. C4 (60)
+		if (! validInput && input.contains ("(") && input.contains (")")) {
+			const auto numberText =
+				input.fromFirstOccurrenceOf ("(", false, false).upToFirstOccurrenceOf (")", false, false).trim();
+			if (numberText.containsOnly ("0123456789")) {
+			midiNote = juce::jmin (numberText.getIntValue(), 127);
+		}	}
+		midiNoteSlider.setValue (midiNote, juce::dontSendNotification);
+		updateNoteNumberFromSlider();
+	});
+	midiNoteText.setKeyboardType (juce::TextEditor::VirtualKeyboardType::numericKeyboard);
+	midiNoteText.setText (juce::CharPointer_UTF8 ("\xe2\x80\x94 \xe2\x80\x94"), false); // sendTextChangeMessage = false
+	                                                                 // "— —"
     scrollContent.addAndMakeVisible (midiNoteLabel);
     midiNoteLabel.setVisible (false);
     midiNoteLabel.setText ("Select button for Midi Note", juce::dontSendNotification);
@@ -544,12 +591,24 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     scrollContent.addAndMakeVisible (ChannelSlider);
     ChannelSlider.setViewportIgnoreDragFlag (true);
     ChannelSlider.setVisible (false);
-    ChannelSlider.addMouseListener (this, true); // true: Listen to any child component within this component
     ChannelSlider.setRange (0, 16, 1);
-    ChannelSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 30, 22);
+    ChannelSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 30, 22);
     ChannelSlider.onValueChange = [this] { updateChannelNumberFromSlider(); };
-    ChannelSlider.textFromValueFunction = [](double value) -> juce::String 
-    { return (static_cast<int> (value) == 0) ? "Off" : juce::String (static_cast<int> (value)); };
+
+    scrollContent.addAndMakeVisible (ChannelText);
+    setupSliderTextEditor (ChannelText, [this] {
+		const auto input = ChannelText.getText().trim();
+		int midiChannel = 0; // Default = Off
+		if (! input.equalsIgnoreCase ("Off")) {
+			const int number = input.getIntValue();
+			if (number >= 1)
+				midiChannel = juce::jmin (number, 16);
+		}
+		ChannelSlider.setValue (midiChannel, juce::dontSendNotification);
+		updateChannelNumberFromSlider();
+	});
+	ChannelText.setKeyboardType (juce::TextEditor::VirtualKeyboardType::numericKeyboard);
+	ChannelText.setText ("Off", false); // sendTextChangeMessage = false
     
     scrollContent.addAndMakeVisible (OffsetLabel);
     OffsetLabel.setVisible (false);
@@ -563,37 +622,61 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     scrollContent.addAndMakeVisible (InNoteSlider);
     InNoteSlider.setViewportIgnoreDragFlag (true);
     InNoteSlider.setVisible (false);
-    InNoteSlider.addMouseListener (this, true); // true: Listen to any child component within this component
     InNoteSlider.setRange (0, 120, 1); // Offset
-    InNoteSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 40, 22);
-    InNoteSlider.setValue (1, juce::sendNotificationSync);
+    InNoteSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 40, 22);
     InNoteSlider.onValueChange = [this]() {
         updateInInfoLabel();
         if (! isApplyingProcessorState)
         {   audioProcessor.setInputNoteRoot (static_cast<int> (InNoteSlider.getValue()));   }
     };
+
+    scrollContent.addAndMakeVisible (InNoteText);
+	setupSliderTextEditor (InNoteText, [this] {
+		const auto input = InNoteText.getText().trim();
+		int note = 0;
+		if (input.containsOnly ("0123456789"))
+			note = juce::jlimit (0, 120, input.getIntValue());
+		InNoteSlider.setValue (note, juce::sendNotificationSync);
+		updateInInfoLabel(); // Also normalise the text if the Slider value did not change.
+	});
+	InNoteText.setKeyboardType (juce::TextEditor::VirtualKeyboardType::numericKeyboard);
+	InNoteText.setInputRestrictions (3, "0123456789");
+    
     scrollContent.addAndMakeVisible (InChannelLabel);
     InChannelLabel.setVisible (false);
     InChannelLabel.setText ("Channel", juce::dontSendNotification);
     
     scrollContent.addAndMakeVisible (InChannelSlider);
-    InChannelSlider.setViewportIgnoreDragFlag (true);
-    InChannelSlider.setVisible (false);
-    InChannelSlider.addMouseListener (this, true); // true: Listen to any child component within this component
-    InChannelSlider.setRange (0, 17, 1);  // 0 = Off, 17 = Omni
-    InChannelSlider.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 30, 22);
-    InChannelSlider.textFromValueFunction = [](double value) -> juce::String {
-		int val = static_cast<int> (value);
-		if (val == 0) return "Off"; if (val == 17) return "All";
-		return juce::String (val); };
-    InChannelSlider.valueFromTextFunction = [](const juce::String& text) -> double {
-		juce::String t = text.trim().toLowerCase();
-		if (t == "off") return 0; if (t == "all") return 17;
-		return t.getIntValue(); };                           // fallback for numbers
-    InChannelSlider.onValueChange = [this]() {
-        if (! isApplyingProcessorState)
-        {   audioProcessor.setInputChannel (static_cast<int> (InChannelSlider.getValue()));   }
-    };
+	InChannelSlider.setViewportIgnoreDragFlag (true);
+	InChannelSlider.setVisible (false);
+	InChannelSlider.setRange (0, 17, 1);  // 0 = Off, 17 = Omni
+	InChannelSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 30, 22);
+	InChannelSlider.onValueChange = [this]() {
+		const auto channel = static_cast<int> (InChannelSlider.getValue());
+		InChannelText.setText (
+			channel == 0  ? "Off" : channel == 17 ? "All" : juce::String (channel), juce::dontSendNotification);
+		if (! isApplyingProcessorState)
+			audioProcessor.setInputChannel (channel);
+	};
+
+    scrollContent.addAndMakeVisible (InChannelText);
+	setupSliderTextEditor (InChannelText, [this] {
+		const auto input = InChannelText.getText().trim();
+		int channel = 0; // Default = Off
+		if (input.equalsIgnoreCase ("All")) {
+			channel = 17;
+		} else if (! input.equalsIgnoreCase ("Off")) {
+			const int number = input.getIntValue();
+			if (number >= 1)
+				channel = juce::jmin (number, 17);
+		}
+		InChannelSlider.setValue (channel, juce::sendNotificationSync);
+		InChannelText.setText (                       // Normalise text even if the Slider value did not change.
+			channel == 0  ? "Off" : channel == 17 ? "All" : juce::String (channel), juce::dontSendNotification);
+	});
+	InChannelText.setKeyboardType (juce::TextEditor::VirtualKeyboardType::numericKeyboard);
+	InChannelText.setText ("Off", false); // sendTextChangeMessage = false
+    
     scrollContent.addAndMakeVisible (InInfoLabel);
     InInfoLabel.setVisible (false);
     InInfoLabel.setText (juce::CharPointer_UTF8
@@ -673,7 +756,7 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
     // Apply the processor-owned state after all components and callbacks exist.
     loadStateFromValueTree (audioProcessor.getAppStateCopy());
     lastSeenStateRevision = audioProcessor.getStateRevision();
-
+    
     // Discard any stale triggers that may have been queued for an older editor.
     int unusedTrigger = 0;
     while (audioProcessor.popIncomingTrigger (unusedTrigger))
@@ -681,11 +764,11 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
 
     audioProcessor.setEditorEventConsumerActive (true);
     startTimerHz (60);
-
-    // Defaults on load
-  	ChannelSlider.updateText();   // Ensure "Off" (0) is shown
-	InChannelSlider.updateText();
-	
+    
+    // Reapply short default label after initial state load
+    InInfoLabel.setText (juce::CharPointer_UTF8 (
+        "Receive: Midi Note# 1–8 \xe2\x9e\x9e Button 1–8"), juce::dontSendNotification);
+    
 	resized(); // Ensure immediate layout on load
 	
 	if (juce::JUCEApplicationBase::isStandaloneApp()) 
@@ -857,33 +940,49 @@ void CallAppAudioProcessorEditor::resized()
 				top = 30;
 				border = 64;
 	}   }   }
-	// Plugin:
-	else if (! isRunningOnIPad() && ! portrait) {    // iPhone – landscape
-		if (display != nullptr) {
-			const auto safeInsets = display->safeAreaInsets;
-			const auto pluginBounds = getScreenBounds();
-			const auto displayBounds = display->logicalBounds;
-	
-			constexpr int edgeTolerance = 2;
-	
-			const bool usesFullDisplayWidth =
-				   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
-				&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
-	
-			if (usesFullDisplayWidth) {     // Plugin with Full Display Width, e.g. GarageBand
-				const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
-				top = 8;
-				border = horizontalSafeInset + 8;
+	// Plugin – iPhone:
+	else if (! isRunningOnIPad()) {
+		// Reapply the layout shortly after an orientation change,
+		// because iOS may update the safe-area insets slightly later.
+		if (getWidth() > 0 && getHeight() > 0) {
+			if (! orientationInitialised) {
+				lastPortrait = portrait;
+				orientationInitialised = true;
 			}
-			else if (getWidth() > 560) {    // if NOT Full Display Width
-				top = 8;
+			else if (portrait != lastPortrait) {
+				lastPortrait = portrait;
+				juce::Timer::callAfterDelay (100, 
+				    [safe = juce::Component::SafePointer<CallAppAudioProcessorEditor> (this)] {
+						if (safe != nullptr) safe->resized(); });
+		}	}
+		// iPhone / landscape
+		if (! portrait) {
+			if (display != nullptr) {
+				const auto safeInsets = display->safeAreaInsets;
+				const auto pluginBounds = getScreenBounds();
+				const auto displayBounds = display->logicalBounds;
+				constexpr int edgeTolerance = 2;
+	
+				const bool usesFullDisplayWidth =
+					   std::abs (pluginBounds.getX() - displayBounds.getX()) <= edgeTolerance
+					&& std::abs (pluginBounds.getRight() - displayBounds.getRight()) <= edgeTolerance;
+	
+				if (usesFullDisplayWidth) {
+					// Plugin spans the full display width, e.g. GarageBand or Audiobus.
+					const auto horizontalSafeInset = juce::jmax (safeInsets.getLeft(), safeInsets.getRight());
+					top = 8;
+					border = horizontalSafeInset + 8;
+				}
+				else if (getWidth() > 560) {     // Wide plugin, but not full display width.
+					top = 8;
+					border = 64;
+		    }	}
+			else if (getWidth() > 560) {         // Fallback if display information is unavailable.
+				top = 8;                         // example: iPhone SE 4' (w = 568 pt)
 				border = 64;
-		}   }
-		else if (getWidth() > 560) {    // Fallback, if display == nullptr
-			top = 8;                    // example: iPhone SE 4' (w = 568 pt)
-			border = 64;
-	}   }
-	else if (isRunningOnIPad() && getWidth() > 560) {    // iPad – wide plugin layout
+	}	}	}
+	// Plugin – iPad:
+	else if (getWidth() > 560) {    // Wide plugin layout
 		top = 8;
 		border = 64;
 	}   // Otherwise: defaults for plugin (top, border = 8), iPhone – portrait & iPad
@@ -931,24 +1030,30 @@ void CallAppAudioProcessorEditor::resized()
     button8.setBounds (xPosRow2, button4.getY(), buttonWidth, buttonHeight);
     Link8.setBounds   (xPosRow2, button4.getY(), buttonWidth, buttonHeight);
     
-    ColorSlider.setBounds (border,         button4.getBottom() + 25,      oneRowWidth,        buttonHeight);
+    
     ColorLabel.setBounds  (border,         button4.getBottom() + 25,      twoRowsWidth - 36,  textHeight);
-    TextColor.setBounds   (xPosRow2 + 40,  ColorSlider.getY(),            twoRowsWidth - 40,  textHeight);
-    DummyLabel.setBounds  (xPosRow2 + 160, ColorSlider.getY(),            twoRowsWidth - 160, textHeight);
+    ColorSlider.setBounds (border,         ColorLabel.getBottom(),        oneRowWidth,        textHeight);    
+    ColorText.setBounds   (border + ColorSlider.getWidth() / 2 - 40, ColorLabel.getY(), 80,   textHeight);
+    TextColor.setBounds   (xPosRow2 + 40,  ColorLabel.getY(),             twoRowsWidth - 40,  textHeight);
+    DummyLabel.setBounds  (xPosRow2 + 160, ColorLabel.getY(),             twoRowsWidth - 160, textHeight);
     colorRange.setBounds  (border,         ColorSlider.getBottom() + gap, 60,                 40);
     RangeLabel.setBounds  (colorRange.getRight() + 4, colorRange.getY(),  oneRowWidth - colorRange.getWidth() - 4, 40);
-    
-    midiNoteSlider.setBounds (border,        ColorSlider.getY(), oneRowWidth,       buttonHeight);
-    midiNoteLabel.setBounds  (border,        ColorSlider.getY(), twoRowsWidth - 36, textHeight);
-    ChannelLabel.setBounds   (xPosRow2 + 36, ColorSlider.getY(), 60,                textHeight);
-    ChannelSlider.setBounds  (xPosRow2 + 94, ColorSlider.getY(), twoRowsWidth - 94, textHeight);
 
-    InNoteSlider.setBounds    (border,      ColorSlider.getBottom() + gap,       twoRowsWidth + 50, buttonHeight);
+    midiNoteLabel.setBounds  (border,                      ColorLabel.getY(),    twoRowsWidth - 36,  textHeight);
+    midiNoteSlider.setBounds (border,                 midiNoteLabel.getBottom(), oneRowWidth,        textHeight);
+    midiNoteText.setBounds   (border + midiNoteSlider.getWidth() / 2 - 40, midiNoteLabel.getY(), 80, textHeight);
+    ChannelLabel.setBounds   (midiNoteText.getRight() + 1, midiNoteLabel.getY(), 60,                 textHeight);
+    ChannelText.setBounds    (ChannelLabel.getRight() - 2, midiNoteLabel.getY(), 30,                 textHeight);
+    ChannelSlider.setBounds  (ChannelText.getRight(),      midiNoteLabel.getY(), twoRowsWidth - 124, textHeight);
+
+    InNoteSlider.setBounds    (border + 40, midiNoteSlider.getBottom() + gap,    twoRowsWidth + 10, buttonHeight);
+    InNoteText.setBounds      (border,               InNoteSlider.getY() + 11,   40,                textHeight);
     InInfoLabel.setBounds     (border - 5,           InNoteSlider.getY() - 5,    oneRowWidth,       16);
     OffsetLabel.setBounds     (border + 57,          InNoteSlider.getY() + 14,   70,                buttonHeight);    
     InChannelLabel.setBounds  (ChannelLabel.getX(),  InNoteSlider.getY(),        60,                buttonHeight);
+    InChannelText.setBounds   (ChannelText.getX(),   InNoteText.getY(),          30,                textHeight);
     InChannelSlider.setBounds (ChannelSlider.getX(), InNoteSlider.getY(), ChannelSlider.getWidth(), buttonHeight);
-    
+
     Edit.setBounds          (contentWidth - border - rightButtonW, top,    rightButtonW, buttonHeight);
     ToggleRows.setBounds    (Edit.getX(),       button2.getY(),            rightButtonW, buttonHeight);
     menu.setBounds          (Edit.getX(),       button3.getY(),            rightButtonW, buttonHeight);
@@ -962,14 +1067,17 @@ void CallAppAudioProcessorEditor::resized()
     editLabel.setBounds     (Edit.getX() - 162, button4.getBottom() + 8,   152,          12);
     MidiSendLabel.setBounds (border - 5,        button4.getBottom() + 8,   80,           16);
     messageLabel.setBounds  (border,            getHeight() - 50,          oneRowWidth,  44); // Fixed Y-position
+	// Keep the message visible above the keyboard.
+	const auto messageOverlap = getIOSKeyboardOverlap (messageLabel, 8);
+	if (messageOverlap > 0)
+		messageLabel.setTopLeftPosition (messageLabel.getX(), messageLabel.getY() - messageOverlap);
     
     constexpr int bottomPadding = 8;             // final (variable) vertical extent
 	auto baseContentBottom = button4.getBottom();
 	
 	if (colorRange.isVisible()) baseContentBottom = juce::jmax (baseContentBottom, colorRange.getBottom());
-	if (exitColor.isVisible())  baseContentBottom = juce::jmax (baseContentBottom, exitColor.getBottom());
 	if (MidiThru.isVisible())   baseContentBottom = juce::jmax (baseContentBottom, MidiThru.getBottom());
-	if (exitMidi.isVisible())   baseContentBottom = juce::jmax (baseContentBottom, exitMidi.getBottom());
+	
 	baseContentHeight = baseContentBottom + bottomPadding;
 	const int contentHeight = baseContentHeight + keyboardScrollReserve;
 	// Use viewport width (safe if viewport is trimmed or later you change widths)
@@ -1041,16 +1149,17 @@ void CallAppAudioProcessorEditor::scheduleKeyboardReserveCheck()
         if (safeThis->keyboardScrollReserve == 0)
             return;
         if (getIOSKeyboardOverlap (safeThis->scrollView, 0) == 0)
-        {
-            safeThis->keyboardScrollReserve = 0;
-            // The keyboard may have been dismissed without a focus change.
-            safeThis->lastAutoScrollEditor = nullptr;
-            safeThis->resized();
-            // Keep the stored position in sync if the viewport was clamped
-            // after removing the temporary content reserve.
-            safeThis->lastScrollY = safeThis->scrollView.getViewPositionY();
-            return;
-        }
+		{
+			// The keyboard may have been dismissed without a focus change.
+			hideIOSMenuNative();
+			safeThis->keyboardScrollReserve = 0;
+			safeThis->lastAutoScrollEditor = nullptr;
+			safeThis->resized();
+			// Keep the stored position in sync if the viewport was clamped
+			// after removing the temporary content reserve.
+			safeThis->lastScrollY = safeThis->scrollView.getViewPositionY();
+			return;
+		}
         safeThis->scheduleKeyboardReserveCheck();
     });
 }
@@ -1104,7 +1213,7 @@ void CallAppAudioProcessorEditor::updateButtonColorFromSlider()
         const auto hexValue = juce::String::toHexString (colorValue).paddedLeft ('0', 6).toUpperCase();
         const auto fullHex = "FF" + hexValue;  // Full opacity
         selectedButton->setColour (juce::TextButton::buttonColourId, juce::Colour::fromString (fullHex));
-        ColorSlider.setTextValueSuffix (hexValue);
+        ColorText.setText (hexValue, juce::dontSendNotification);
         
         if (! isApplyingProcessorState) {
             int index = 0;
@@ -1183,12 +1292,14 @@ void CallAppAudioProcessorEditor::updateColorSliderRange()
         colorRange.setButtonText ("Full");
     }
 }
-
+                            // MidiNoteName (true, true, 4): useSharps, includeOctaveNumber, MiddleC=64
 void CallAppAudioProcessorEditor::updateNoteNumberFromSlider()
 {
-    if (selectedButton != nullptr)
-    {
-        const auto midiNote = static_cast<int> (midiNoteSlider.getValue());
+    const auto midiNote = static_cast<int> (midiNoteSlider.getValue());
+    const auto noteName = juce::MidiMessage::getMidiNoteName (midiNote, true, true, 4);
+    midiNoteText.setText (noteName + " (" + juce::String (midiNote) + ")", juce::dontSendNotification);
+
+    if (selectedButton != nullptr) {
         const auto midiChannel =
             selectedButton->getComponentID().fromFirstOccurrenceOf ("_", false, false).getIntValue();
         const auto storedData = juce::String (midiNote) + "_" + juce::String (midiChannel);
@@ -1232,9 +1343,10 @@ void CallAppAudioProcessorEditor::updateNoteSliderFromButton()
 
 void CallAppAudioProcessorEditor::updateChannelNumberFromSlider()
 {
-    if (selectedButton != nullptr)
-    {
-        const auto midiChannel = static_cast<int> (ChannelSlider.getValue());
+    const auto midiChannel = static_cast<int> (ChannelSlider.getValue());
+    ChannelText.setText (
+        midiChannel == 0 ? "Off" : juce::String (midiChannel), juce::dontSendNotification);
+    if (selectedButton != nullptr) {
         const auto midiNote =
             selectedButton->getComponentID().upToFirstOccurrenceOf ("_", false, false).getIntValue();
         const auto storedData = juce::String (midiNote) + "_" + juce::String (midiChannel);
@@ -1270,12 +1382,10 @@ void CallAppAudioProcessorEditor::updateChannelSliderFromButton()
             if (midiChannel >= 0 && midiChannel <= 16)
             {
                 ChannelSlider.setValue (midiChannel, juce::sendNotificationSync);
-                ChannelSlider.updateText(); // Ensure text is refreshed
                 return;
             }
         }
         ChannelSlider.setValue (0, juce::sendNotificationSync); // Default to "Off"
-        ChannelSlider.updateText(); // Ensure "Off" is shown
     }
 }
 
@@ -1338,15 +1448,10 @@ void CallAppAudioProcessorEditor::updateInInfoLabel()
 {
     int rootNote = static_cast<int> (InNoteSlider.getValue());
     int lastNote = rootNote + 7;
-
-    auto noteNameFor = [](int midiNote) -> juce::String {
-        static const juce::StringArray names = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-        int octave = (midiNote / 12) - 1;
-        return names[midiNote % 12] + juce::String (octave);
-    };
-
-    juce::String rootName = noteNameFor (rootNote);
-    juce::String lastName = noteNameFor (lastNote);
+    InNoteText.setText (juce::String (rootNote), juce::dontSendNotification);
+                                // (true, true, 4): useSharps, includeOctaveNumber, MiddleC=64
+    const auto rootName = juce::MidiMessage::getMidiNoteName (rootNote, true, true, 4);
+	const auto lastName = juce::MidiMessage::getMidiNoteName (lastNote, true, true, 4);
 
     juce::String text = "Receive: Midi Note# " + rootName + "–" + lastName
     	+ " (" + juce::String (rootNote)
@@ -1702,22 +1807,12 @@ void TextEditorPopup::mouseDown (const juce::MouseEvent& e)
     }
 }
 
-void CallAppAudioProcessorEditor::mouseEnter (const juce::MouseEvent& e)
-{
-    if (auto* editor = dynamic_cast<juce::TextEditor*> (e.eventComponent)) { 
-        colorRange.setToggleState (false, juce::sendNotificationSync);  // Color range = Full RGB
-        
-        ColorSlider.setViewportIgnoreDragFlag (false);     // Allow scrolling temporarily
-		midiNoteSlider.setViewportIgnoreDragFlag (false);
-		ChannelSlider.setViewportIgnoreDragFlag (false);
-		InNoteSlider.setViewportIgnoreDragFlag (false);
-		InChannelSlider.setViewportIgnoreDragFlag (false);
-    }
-}
-
 void CallAppAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
-{    
-    if      (e.eventComponent == &Link1) { updateButtonState (&button1, true); NoteOnOff (&button1, true); }
+{
+    if (e.eventComponent == &ColorText) {
+        colorRange.setToggleState (false, juce::sendNotificationSync);  // Color range = Full RGB
+    }
+    else if (e.eventComponent == &Link1) { updateButtonState (&button1, true); NoteOnOff (&button1, true); }
     else if (e.eventComponent == &Link2) { updateButtonState (&button2, true); NoteOnOff (&button2, true); }
     else if (e.eventComponent == &Link3) { updateButtonState (&button3, true); NoteOnOff (&button3, true); }
     else if (e.eventComponent == &Link4) { updateButtonState (&button4, true); NoteOnOff (&button4, true); }
@@ -1729,12 +1824,6 @@ void CallAppAudioProcessorEditor::mouseDown (const juce::MouseEvent& e)
 
 void CallAppAudioProcessorEditor::mouseUp (const juce::MouseEvent& e)
 {
-    ColorSlider.setViewportIgnoreDragFlag (true);     // Restore default
-	midiNoteSlider.setViewportIgnoreDragFlag (true);
-	ChannelSlider.setViewportIgnoreDragFlag (true);
-	InNoteSlider.setViewportIgnoreDragFlag (true);
-	InChannelSlider.setViewportIgnoreDragFlag (true);
-    
     if      (e.eventComponent == &Link1) { updateButtonState (&button1, false); NoteOnOff (&button1, false); }
     else if (e.eventComponent == &Link2) { updateButtonState (&button2, false); NoteOnOff (&button2, false); }
     else if (e.eventComponent == &Link3) { updateButtonState (&button3, false); NoteOnOff (&button3, false); }
@@ -1744,79 +1833,31 @@ void CallAppAudioProcessorEditor::mouseUp (const juce::MouseEvent& e)
     else if (e.eventComponent == &Link7) { updateButtonState (&button7, false); NoteOnOff (&button7, false); }
     else if (e.eventComponent == &Link8) { updateButtonState (&button8, false); NoteOnOff (&button8, false); }
 
-    auto* textEditor = dynamic_cast<juce::TextEditor*> (e.originalComponent);
-
-    if (textEditor == nullptr) textEditor = dynamic_cast<juce::TextEditor*> (e.eventComponent);
-    if (textEditor != nullptr)
-    {
-        const bool autoScrollScheduled = lastAutoScrollEditor.getComponent() != textEditor;
-        
-        if (autoScrollScheduled)
-        {
-            lastAutoScrollEditor = textEditor;
-            scrollEditorAboveKeyboard (*textEditor);
-        }
-        const int clicks = e.getNumberOfClicks();
-        // If opening the keyboard also triggers auto-scroll, wait until
-        // the editor has reached its final position before showing the menu.
-        const int menuDelay = autoScrollScheduled ? 320 : (clicks > 1 ? 10 : 0);
-
-        if (menuDelay > 0)
-        {
-            juce::Component::SafePointer<CallAppAudioProcessorEditor> safeThis (this);
-            juce::Component::SafePointer<juce::TextEditor> safeEditor (textEditor);
-
-            juce::Timer::callAfterDelay (menuDelay, [safeThis, safeEditor] {
-                if (safeThis == nullptr || safeEditor == nullptr)
-                    return;
-                safeThis->showIOSContextMenu (*safeEditor);
-            });
-        }
-        else { showIOSContextMenu (*textEditor); }
-
-        textEditor->onTextChange = []() { hideIOSMenuNative(); };
-
-        return;
-    }
-    // On the first tap, a Slider's internal TextEditor may not exist yet.
-    // Check again shortly after the Slider has entered text-edit mode.
-    auto* label = dynamic_cast<juce::Label*> (e.originalComponent);
+    if (auto* textEditor = dynamic_cast<juce::TextEditor*> (e.eventComponent))
+	{
+		const bool autoScrollScheduled = lastAutoScrollEditor.getComponent() != textEditor;
+		if (autoScrollScheduled)
+		{
+			lastAutoScrollEditor = textEditor;
+			scrollEditorAboveKeyboard (*textEditor);
+			return; // First focus: Select All, but don't show menu yet
+		}
+		const int clicks = e.getNumberOfClicks();
+		const int menuDelay = clicks > 1 ? 10 : 0;
 	
-	const bool comesFromSliderTextBox = label != nullptr && (
-		ColorSlider.isParentOf (label)
-		|| midiNoteSlider.isParentOf (label)
-		|| ChannelSlider.isParentOf (label)
-		|| InNoteSlider.isParentOf (label)
-		|| InChannelSlider.isParentOf (label));
+		if (menuDelay > 0)
+		{
+			juce::Component::SafePointer<CallAppAudioProcessorEditor> safeThis (this);
+			juce::Component::SafePointer<juce::TextEditor> safeEditor (textEditor);
 	
-	if (comesFromSliderTextBox)
-    {
-        label->onEditorHide = [] { hideIOSMenuNative(); };
-        
-        juce::Component::SafePointer<CallAppAudioProcessorEditor> safeThis (this);
-
-        juce::Timer::callAfterDelay (20, [safeThis] {
-            if (safeThis == nullptr) return;
-            auto* focusedComponent = juce::Component::getCurrentlyFocusedComponent();
-            auto* focusedEditor = dynamic_cast<juce::TextEditor*> (focusedComponent);
-            if (focusedEditor == nullptr) return;
-
-            const bool belongsToSupportedSlider =
-				safeThis->ColorSlider.isParentOf (focusedEditor)
-				|| safeThis->midiNoteSlider.isParentOf (focusedEditor)
-				|| safeThis->ChannelSlider.isParentOf (focusedEditor)
-				|| safeThis->InNoteSlider.isParentOf (focusedEditor)
-				|| safeThis->InChannelSlider.isParentOf (focusedEditor);
-
-            if (! belongsToSupportedSlider)
-                return;
-            if (safeThis->lastAutoScrollEditor.getComponent() == focusedEditor)
-                return;
-
-            safeThis->lastAutoScrollEditor = focusedEditor;
-            safeThis->scrollEditorAboveKeyboard (*focusedEditor);
-        });
-    }
+			juce::Timer::callAfterDelay (menuDelay, [safeThis, safeEditor] {
+				if (safeThis == nullptr || safeEditor == nullptr)
+					return;
+				safeThis->showIOSContextMenu (*safeEditor);
+			});
+		}
+		else { showIOSContextMenu (*textEditor); }
+	}
 }
 
 void TextEditorPopup::mouseUp (const juce::MouseEvent& e)
