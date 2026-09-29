@@ -5,8 +5,6 @@
   <dict>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>This app requires audio input. If you do not have an audio interface connected it will use the built-in microphone.</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UIViewControllerBasedStatusBarAppearance</key>
@@ -33,7 +31,7 @@
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.4</string>
+    <string>1.0.5</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSHumanReadableCopyright</key>
@@ -68,7 +66,7 @@
             <key>subtype</key>
             <string>Beam</string>
             <key>version</key>
-            <integer>65540</integer>
+            <integer>65541</integer>
             <key>sandboxSafe</key>
             <true/>
             <key>tags</key>
