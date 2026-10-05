@@ -167,7 +167,7 @@ void TextEditorPopup::resized()
 			const auto safeInsets = display->safeAreaInsets;
             // iPad
             if (isRunningOnIPad()) {
-                pinnedTopInset = juce::jmax (76, safeInsets.getTop()); // Minimum for Stage Manager protection
+                pinnedTopInset = 76; // For Stage Manager protection; no need for safeArea (= 0 or 10)
                 top = 6;  // Keep content padding small, because the big space is now "pinned"
                 border = portrait ? 8 : 64;  // Portrait : Landscape
             } else {
@@ -412,7 +412,7 @@ CallAppAudioProcessorEditor::CallAppAudioProcessorEditor (CallAppAudioProcessor&
 	link8Value = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (audioProcessor.treeState, "app8", Link8);
 	
     setSize (500, 360);
-    setResizable (true, false);
+//  setResizable (true, false); // Mac only; useless in iOS
     setOpaque (true);
     setWantsKeyboardFocus (true);
     
@@ -907,7 +907,7 @@ void CallAppAudioProcessorEditor::resized()
 				+ " | " + (portrait ? "portrait" : "landscape"));
 #endif      // iPad
 			if (isRunningOnIPad()) {
-				pinnedTopInset = juce::jmax (76, safeInsets.getTop()); // Minimum for Stage Manager protection
+				pinnedTopInset = 76; // For Stage Manager protection; no need for safeArea (= 0 or 10)
 				top = 6;  // Keep content padding small, because the big space is now "pinned"
 				border = portrait ? 8 : 64;  // Portrait : Landscape
 			}
