@@ -5,6 +5,19 @@
   <dict>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>CFBundleURLTypes</key>
+    <array>
+      <dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLName</key>
+        <string>URL Beamer</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+          <string>url-beamer</string>
+        </array>
+      </dict>
+    </array>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UIViewControllerBasedStatusBarAppearance</key>
@@ -31,7 +44,7 @@
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.5</string>
+    <string>1.0.6</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSHumanReadableCopyright</key>
@@ -66,7 +79,7 @@
             <key>subtype</key>
             <string>Beam</string>
             <key>version</key>
-            <integer>65541</integer>
+            <integer>65542</integer>
             <key>sandboxSafe</key>
             <true/>
             <key>tags</key>
